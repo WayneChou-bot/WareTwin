@@ -35,7 +35,9 @@ export const SIM = {
   MAX_WAITING_TASKS: 12,
   WAIT_REPLAN_TICKS: 25,     // 被擋 2.5 s 後重新規劃
   WAIT_BACKOFF_TICKS: 80,    // 被擋 8 s 仍無解 → 讓路 (deadlock breaker)
-  STATION_ARRIVE_CELLS: 3,
+  STATION_ARRIVE_CELLS: 2,   // 距工作站 ≤2 格且前方被佔、又沒有空的服務格 → 就地作業
+  SERVICE_RADIUS: 1,         // 工作站/貨架 access point 周圍 (Chebyshev) 1 格內的可走格 = 服務格，一台一格
+  MIN_SEP: 0.9,              // 任兩台中心距硬下限 (m)：一步會更靠近且低於此值就不走（物理防撞）
   // Phase 7：虛擬 LiDAR 與局部避障
   LIDAR_RANGE: 4.0,          // m
   LIDAR_FOV: Math.PI * 1.5,  // 270°
@@ -411,9 +413,25 @@ export class SimEngine {
   // ─────────────────────────────────────────────────────────
   // 路徑與移動
   // ─────────────────────────────────────────────────────────
+  /** 工作站/貨架的服務格：access point 周圍可走、且沒被其他機器人當目標或佔用的格，挑離自己最近的；都滿了回傳 null */
+  private freeServiceCell(r: RobotState, point: [number, number]): GridCell | null {
+    const ap = nearestWalkable(this.grid, point[0], point[1]);
+    const claimed = new Set<string>();
+    for (const id in this.state.robots) { if (id === r.id) continue; const t = this.rt[id].target; if (t) claimed.add(cellKey(t[0], t[1])); const o = this.state.robots[id]; const c = toCell(o.position[0], o.position[2]); claimed.add(cellKey(c[0], c[1])); }
+    const my = toCell(r.position[0], r.position[2]);
+    let best: GridCell | null = null, bestD = Infinity;
+    for (let dr = -SIM.SERVICE_RADIUS; dr <= SIM.SERVICE_RADIUS; dr++) for (let dc = -SIM.SERVICE_RADIUS; dc <= SIM.SERVICE_RADIUS; dc++) {
+      const c: GridCell = [ap[0] + dc, ap[1] + dr];
+      if (!isWalkable(this.grid, c[0], c[1]) || claimed.has(cellKey(c[0], c[1]))) continue;
+      const d = Math.hypot(c[0] - my[0], c[1] - my[1]) + Math.hypot(dc, dr) * 0.01; // 近的優先，同距離時靠近 access point 的優先
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+  }
+
   private planTo(r: RobotState, rt: RobotRt, point: [number, number], phase: RobotRt["phase"], locId: string | null = null) {
     const start = toCell(r.position[0], r.position[2]);
-    const goal = nearestWalkable(this.grid, point[0], point[1]);
+    const goal = (locId ? this.freeServiceCell(r, point) : null) ?? nearestWalkable(this.grid, point[0], point[1]);
     const path = astar(this.grid, start, goal, { blocked: this.blockedCells(r.id), costMap: this.congestionCost() }) ?? astar(this.grid, start, goal) ?? [];
     r.path = path; r.path_index = 0; rt.target = goal; rt.phase = phase; rt.goalLoc = locId; rt.waitTicks = 0; rt.backingOff = false; rt.resumePoint = null;
     r.destination = locId;
@@ -453,6 +471,13 @@ export class SimEngine {
       const remaining0 = r.path.length - r.path_index;
       // 工作站前排隊：距目標 ≤ N 格就視為到達、就地作業（避免 10 台排同一格造成死鎖）
       if (!rt.backingOff && remaining0 <= SIM.STATION_ARRIVE_CELLS && (rt.phase === "TO_SOURCE" || rt.phase === "TO_DEST")) {
+        // 先找另一個空的服務格（每台一格，不會疊在一起）；真的都滿了才就地作業
+        const loc = rt.goalLoc ? this.loc[rt.goalLoc] : null;
+        const alt = loc ? this.freeServiceCell(r, loc.access_point) : null;
+        if (alt && (alt[0] !== rt.target![0] || alt[1] !== rt.target![1])) {
+          const p = astar(this.grid, myCell, alt, { blocked: this.blockedCells(r.id) });
+          if (p && p.length) { r.path = p; r.path_index = 0; rt.target = alt; rt.waitTicks = 0; return; }
+        }
         rt.target = null; r.velocity = 0; r.path = []; r.path_index = 0; r.eta_s = 0; rt.waitTicks = 0; return;
       }
       r.velocity = Math.max(0, r.velocity - SIM.ACCEL * SIM.TICK_S * 2);
@@ -483,7 +508,16 @@ export class SimEngine {
     r.velocity = Math.min(vmax, r.velocity + SIM.ACCEL * SIM.TICK_S);
     r.heading += Math.sign(dh) * Math.min(Math.abs(dh), 4.0 * SIM.TICK_S);
     const stepLen = Math.min(dist, r.velocity * SIM.TICK_S);
-    if (dist > 1e-6) { r.position[0] += (dx / dist) * stepLen; r.position[2] += (dz / dist) * stepLen; }
+    if (dist > 1e-6) {
+      const nx = r.position[0] + (dx / dist) * stepLen, nz = r.position[2] + (dz / dist) * stepLen;
+      // 物理防撞：這一步會讓我跟某台的中心距低於 MIN_SEP 且比現在更近 → 不走（等下一 tick 或重新規劃）
+      for (const id in this.state.robots) {
+        if (id === r.id) continue; const o = this.state.robots[id];
+        const dn = Math.hypot(nx - o.position[0], nz - o.position[2]);
+        if (dn < SIM.MIN_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; rt.waitTicks++; r.stats.wait_ticks++; if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) this.backOff(r, rt); return; }
+      }
+      r.position[0] = nx; r.position[2] = nz;
+    }
     r.stats.distance_m += stepLen;
     // 交通熱圖
     const ci = myCell[1] * this.grid.cols + myCell[0]; if (ci >= 0 && ci < this.traffic.length) { this.traffic[ci] += 1; this.trafficShort[ci] += 1; }

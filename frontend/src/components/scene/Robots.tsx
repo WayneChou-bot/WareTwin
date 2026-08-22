@@ -32,12 +32,12 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       <group onClick={(e) => { e.stopPropagation(); onSelect(); }} onPointerOver={() => (document.body.style.cursor = "pointer")} onPointerOut={() => (document.body.style.cursor = "")}>
         {/* 底盤 */}
         <mesh position={[0, 0.22, 0]} castShadow>
-          <boxGeometry args={[1.3, 0.32, 0.9]} />
+          <boxGeometry args={[0.95, 0.32, 0.68]} />
           <meshStandardMaterial color="#d7dce6" roughness={0.35} metalness={0.5} />
         </mesh>
         {/* 黑色頂蓋 */}
         <mesh position={[0, 0.42, 0]} castShadow>
-          <boxGeometry args={[1.1, 0.1, 0.78]} />
+          <boxGeometry args={[0.8, 0.1, 0.58]} />
           <meshStandardMaterial color="#111827" roughness={0.5} metalness={0.3} />
         </mesh>
         {/* 頂升平台 */}
@@ -46,20 +46,20 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
           <meshStandardMaterial color="#1f2937" roughness={0.6} metalness={0.4} />
         </mesh>
         {/* 前燈條 */}
-        <mesh position={[0.66, 0.22, 0]}>
-          <boxGeometry args={[0.02, 0.08, 0.7]} />
+        <mesh position={[0.485, 0.22, 0]}>
+          <boxGeometry args={[0.02, 0.08, 0.5]} />
           <meshBasicMaterial color="#60a5fa" />
         </mesh>
         {/* 黃黑警示條 */}
-        {[-0.46, 0.46].map((z) => (
+        {[-0.35, 0.35].map((z) => (
           <mesh key={z} position={[0, 0.1, z]}>
-            <boxGeometry args={[1.3, 0.06, 0.02]} />
+            <boxGeometry args={[0.95, 0.06, 0.02]} />
             <meshBasicMaterial color="#facc15" />
           </mesh>
         ))}
         {/* 輪子 */}
         <group ref={wheelsRef}>
-          {[[-0.45, -0.42], [0.45, -0.42], [-0.45, 0.42], [0.45, 0.42]].map(([x, z], i) => (
+          {[[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]].map(([x, z], i) => (
             <mesh key={i} position={[x, 0.12, z]} rotation-x={Math.PI / 2}>
               <cylinderGeometry args={[0.12, 0.12, 0.1, 14]} />
               <meshStandardMaterial color="#0f172a" roughness={0.9} />
@@ -67,14 +67,14 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
           ))}
         </group>
         {/* 狀態燈 */}
-        <mesh position={[-0.45, 0.5, 0]}>
+        <mesh position={[-0.33, 0.5, 0]}>
           <sphereGeometry args={[0.07, 10, 10]} />
           <meshBasicMaterial ref={lampRef} color={color} transparent />
         </mesh>
         {/* 載貨箱 */}
         {loaded && (
           <mesh position={[0, 0.85, 0]} castShadow>
-            <boxGeometry args={[1.0, 0.65, 0.8]} />
+            <boxGeometry args={[0.78, 0.6, 0.62]} />
             <meshStandardMaterial color="#c49a6c" roughness={0.9} />
           </mesh>
         )}
@@ -86,10 +86,10 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       )}
       {/* 地面光環 */}
       <mesh ref={ringRef} position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>
-        <ringGeometry args={[0.75, 0.95, 40]} />
+        <ringGeometry args={[0.58, 0.74, 40]} />
         <meshBasicMaterial color={selected ? "#60a5fa" : color} transparent opacity={selected ? 0.9 : 0.45} side={THREE.DoubleSide} />
       </mesh>
-      {selected && <mesh position={[0, 0.015, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[1.4, 40]} /><meshBasicMaterial color="#3b82f6" transparent opacity={0.18} /></mesh>}
+      {selected && <mesh position={[0, 0.015, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[1.1, 40]} /><meshBasicMaterial color="#3b82f6" transparent opacity={0.18} /></mesh>}
       {!lite && (r.status === "ERROR") && <pointLight position={[0, 1, 0]} color="#ef4444" intensity={4} distance={5} />}
       {showLabel && (
         <Html position={[0, 1.5, 0]} zIndexRange={[10, 0]}>

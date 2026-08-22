@@ -18,7 +18,7 @@ def test_perception_keeps_distance_and_reports():
                 d = math.hypot(a["position"][0] - b["position"][0], a["position"][2] - b["position"][2])
                 min_d = min(min_d, d)
     assert seen > 0 and stops + slows > 0
-    assert min_d >= 0.5
+    assert min_d >= 0.9  # MIN_SEP 硬下限
     assert any("LiDAR" in e["message"] for e in eng.state["recent_events"])
     assert eng.state["kpi"]["operation"]["completed_today"] > 40
 

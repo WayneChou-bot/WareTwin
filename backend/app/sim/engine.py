@@ -20,7 +20,7 @@ TH = dict(BATTERY_WARNING=20, BATTERY_CRITICAL=10, BATTERY_CHARGE_TO=95, CONGEST
 SIM = dict(
     TICK_S=0.1, MAX_SPEED=1.5, ACCEL=1.2, TURN_SLOW=0.5, PICK_TICKS=40, DROP_TICKS=30,
     BATTERY_MOVE=0.010, BATTERY_LOAD=0.004, BATTERY_IDLE=0.0008, CHARGE_RATE=0.06,
-    TASK_INTERVAL_TICKS=70, MAX_WAITING_TASKS=12, WAIT_REPLAN_TICKS=25, WAIT_BACKOFF_TICKS=80, STATION_ARRIVE_CELLS=3, ON_TIME_LIMIT_TICKS=2400,
+    TASK_INTERVAL_TICKS=70, MAX_WAITING_TASKS=12, WAIT_REPLAN_TICKS=25, WAIT_BACKOFF_TICKS=80, STATION_ARRIVE_CELLS=2, SERVICE_RADIUS=1, MIN_SEP=0.9, ON_TIME_LIMIT_TICKS=2400,
     IDLE_TO_PARK_TICKS=300, KPI_EVERY=10, SERIES_EVERY=600, EVENT_RING=500, ZONE_CAPACITY=6,
     # Phase 7：虛擬 LiDAR 與局部避障（與 TS 引擎相同）
     LIDAR_RANGE=4.0, LIDAR_FOV=math.pi * 1.5, PERC_STOP=1.7, PERC_SLOW=2.8, PERC_LOOKAHEAD=3, PERC_EVENT_TICKS=200,
@@ -460,9 +460,32 @@ class SimEngine:
     # ─────────────────────────────────────────────────────────
     # 路徑與移動
     # ─────────────────────────────────────────────────────────
+    def _free_service_cell(self, r: dict[str, Any], point: tuple[float, float]) -> Optional[tuple[int, int]]:
+        """工作站/貨架的服務格：access point 周圍可走、且沒被其他機器人當目標或佔用的格，挑離自己最近的；都滿了回傳 None"""
+        ap = nearest_walkable(self.grid, point[0], point[1])
+        claimed: set[tuple[int, int]] = set()
+        for rid, o in self.state["robots"].items():
+            if rid == r["id"]:
+                continue
+            t = self.rt[rid].target
+            if t: claimed.add((t[0], t[1]))
+            claimed.add(to_cell(o["position"][0], o["position"][2]))
+        my = to_cell(r["position"][0], r["position"][2])
+        best: Optional[tuple[int, int]] = None; best_d = math.inf
+        R = SIM["SERVICE_RADIUS"]
+        for dr in range(-R, R + 1):
+            for dc in range(-R, R + 1):
+                c = (ap[0] + dc, ap[1] + dr)
+                if not is_walkable(self.grid, c[0], c[1]) or c in claimed:
+                    continue
+                d = math.hypot(c[0] - my[0], c[1] - my[1]) + math.hypot(dc, dr) * 0.01
+                if d < best_d:
+                    best_d = d; best = c
+        return best
+
     def _plan_to(self, r: dict[str, Any], rt: RobotRt, point: tuple[float, float], phase: str, loc_id: Optional[str] = None) -> None:
         start = to_cell(r["position"][0], r["position"][2])
-        goal = nearest_walkable(self.grid, point[0], point[1])
+        goal = (self._free_service_cell(r, point) if loc_id else None) or nearest_walkable(self.grid, point[0], point[1])
         path = astar(self.grid, start, goal, blocked=self._blocked_cells(r["id"]), cost_map=self._congestion_cost())
         if path is None:
             path = astar(self.grid, start, goal)
@@ -508,6 +531,13 @@ class SimEngine:
             remaining0 = len(r["path"]) - r["path_index"]
             # 工作站前排隊：距目標 ≤ N 格就視為到達、就地作業
             if not rt.backing_off and remaining0 <= SIM["STATION_ARRIVE_CELLS"] and rt.phase in ("TO_SOURCE", "TO_DEST"):
+                # 先找另一個空的服務格（每台一格，不會疊在一起）；真的都滿了才就地作業
+                loc = self.loc.get(rt.goal_loc) if rt.goal_loc else None
+                alt = self._free_service_cell(r, tuple(loc["access_point"])) if loc else None
+                if alt and rt.target and (alt[0] != rt.target[0] or alt[1] != rt.target[1]):
+                    p = astar(self.grid, my_cell, alt, blocked=self._blocked_cells(r["id"]))
+                    if p:
+                        r["path"] = [list(c) for c in p]; r["path_index"] = 0; rt.target = alt; rt.wait_ticks = 0; return
                 rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; r["eta_s"] = 0; rt.wait_ticks = 0; return
             r["velocity"] = max(0, r["velocity"] - SIM["ACCEL"] * SIM["TICK_S"] * 2)
             rt.wait_ticks += 1; r["stats"]["wait_ticks"] += 1
@@ -542,7 +572,18 @@ class SimEngine:
         r["heading"] += _sign(dh) * min(abs(dh), 4.0 * SIM["TICK_S"])
         step_len = min(dist, r["velocity"] * SIM["TICK_S"])
         if dist > 1e-6:
-            pos[0] += (dx / dist) * step_len; pos[2] += (dz / dist) * step_len
+            nx = pos[0] + (dx / dist) * step_len; nz = pos[2] + (dz / dist) * step_len
+            # 物理防撞：這一步會讓我跟某台的中心距低於 MIN_SEP 且比現在更近 → 不走
+            for oid, o in self.state["robots"].items():
+                if oid == r["id"]:
+                    continue
+                dn = math.hypot(nx - o["position"][0], nz - o["position"][2])
+                if dn < SIM["MIN_SEP"] and dn < math.hypot(pos[0] - o["position"][0], pos[2] - o["position"][2]):
+                    r["velocity"] = 0; rt.wait_ticks += 1; r["stats"]["wait_ticks"] += 1
+                    if rt.wait_ticks >= SIM["WAIT_BACKOFF_TICKS"]:
+                        self._back_off(r, rt)
+                    return
+            pos[0] = nx; pos[2] = nz
         r["stats"]["distance_m"] += step_len
         ci = my_cell[1] * self.grid.cols + my_cell[0]
         if 0 <= ci < len(self.traffic):
