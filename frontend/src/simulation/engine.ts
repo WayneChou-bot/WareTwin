@@ -16,6 +16,7 @@ import type {
 } from "../schema/twin_state";
 import { THRESHOLDS } from "../schema/twin_state";
 import { astar, cellKey, cellCenter, isWalkable, nearestWalkable, toCell, type NavGrid } from "./astar";
+import { taskError } from "./rules";
 
 // ─────────────────────────────────────────────────────────────
 // 參數（集中一處，之後可由 UI 調整）
@@ -176,6 +177,8 @@ export class SimEngine {
 
   /** 使用者手動建立任務 */
   createTask(t: { type: TaskState["type"]; priority: TaskPriority; source: string; destination: string; load_units?: number }): TaskState {
+    const err = taskError(this.loc, t.type, t.source, t.destination);
+    if (err) throw new Error(err);
     const id = `A${this.taskSeq++}`;
     const task: TaskState = { id, type: t.type, priority: t.priority, status: "WAITING", source: t.source, destination: t.destination, assigned_robot: null, parent_task_id: null, created_tick: this.state.sim.tick, assigned_tick: null, started_tick: null, completed_tick: null, deadline_tick: this.state.sim.tick + SIM.ON_TIME_LIMIT_TICKS, eta_s: null, load_units: t.load_units ?? 1 };
     this.state.tasks[id] = task;
@@ -318,9 +321,15 @@ export class SimEngine {
       case "PICKING": {
         r.velocity = 0;
         if (--rt.dwell <= 0 && task) {
+          const dest = this.loc[task.destination];
+          if (!dest) { // 防禦：目的地不存在 → 任務失敗、機器人回 IDLE，不讓迴圈炸掉
+            task.status = "FAILED"; task.completed_tick = tick;
+            this.emit("TASK_FAILED", "SIMULATION", "HIGH", `Task #${task.id} failed: unknown destination ${task.destination}`, { robot_id: r.id, task_id: task.id });
+            r.current_task_id = null; r.destination = null; rt.phase = null; rt.goalLoc = null; this.setFsm(r, "IDLE"); break;
+          }
           r.load.current = Math.min(r.load.capacity, task.load_units);
           this.emit("TASK_STARTED", "ROBOT", "INFO", `${r.id} picked item at ${this.pretty(task.source)}`, { robot_id: r.id, task_id: task.id });
-          this.planTo(r, rt, this.loc[task.destination].access_point, "TO_DEST", task.destination);
+          this.planTo(r, rt, dest.access_point, "TO_DEST", task.destination);
           this.setFsm(r, "TRANSPORTING");
         }
         break;

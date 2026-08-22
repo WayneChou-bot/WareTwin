@@ -215,7 +215,7 @@ class TwinServer:
 
     async def handle(self, ws: WebSocket, raw: str) -> None:
         key = client_key(dict(ws.headers), ws.client.host if ws.client else None)
-        if len(raw) > MAX_WS_MESSAGE_BYTES:
+        if len(raw.encode("utf-8")) > MAX_WS_MESSAGE_BYTES:
             await ws.send_text(json.dumps({"type": "ERROR", "code": "TOO_LARGE", "message": f"message exceeds {MAX_WS_MESSAGE_BYTES // 1024} KB"})); return
         ok, wait = limiter.check("ws", key)
         if not ok:
@@ -255,7 +255,10 @@ class TwinServer:
             eng.clear_injection(msg.kind, msg.target_id)
         elif t == "CREATE_TASK":
             nt: NewTask = msg.task
-            task = eng.create_task(nt.type, nt.priority, nt.source, nt.destination, nt.load_units)
+            try:
+                task = eng.create_task(nt.type, nt.priority, nt.source, nt.destination, nt.load_units)
+            except ValueError as e:
+                await ws.send_text(json.dumps({"type": "ERROR", "code": "BAD_TASK", "message": str(e)})); return
             if nt.deadline_s is not None:
                 task["deadline_tick"] = eng.state["sim"]["tick"] + int(nt.deadline_s * 10)
         elif t == "ACK_ALERT":
@@ -323,16 +326,54 @@ _origins = [o.strip() for o in os.environ.get("TWIN_CORS_ORIGINS", "*").split(",
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_origin_regex=os.environ.get("TWIN_CORS_REGEX") or None, allow_methods=["*"], allow_headers=["*"])
 
 
-@app.middleware("http")
-async def guard_middleware(request: Request, call_next):
-    """公開 Demo 防護：會改狀態的請求檢查 Origin + body 大小；GET 不受影響（health / state / layout 可自由讀取）。"""
-    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
-        if not origin_allowed(request.headers.get("origin")):
-            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
-        cl = request.headers.get("content-length")
+class GuardMiddleware:
+    """純 ASGI middleware（不是 BaseHTTPMiddleware，這樣才能在 receive 層攔截並直接回 413）：
+    會改狀態的請求檢查 Origin + 以實際收到的 bytes 計算 body 大小；GET 不受影響。"""
+
+    def __init__(self, app_: Any) -> None:
+        self.app = app_
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "DELETE", "PATCH"):
+            await self.app(scope, receive, send); return
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+        if not origin_allowed(headers.get("origin")):
+            await _json_response(send, 403, {"detail": "origin not allowed"}); return
+        cl = headers.get("content-length")
         if cl and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
-            return JSONResponse({"detail": f"body exceeds {MAX_BODY_BYTES // 1024} KB"}, status_code=413)
-    return await call_next(request)
+            await _json_response(send, 413, {"detail": f"body exceeds {MAX_BODY_BYTES // 1024} KB"}); return
+        total = 0; tripped = False; responded = False
+
+        async def capped_receive() -> dict[str, Any]:
+            nonlocal total, tripped
+            msg = await receive()
+            if msg["type"] == "http.request":
+                total += len(msg.get("body", b""))
+                if total > MAX_BODY_BYTES:
+                    tripped = True
+                    # 停止讀取：回傳「body 結束」讓下游的 JSON 解析失敗，再由 guarded_send 把回應改成 413
+                    return {"type": "http.request", "body": b"", "more_body": False}
+            return msg
+
+        async def guarded_send(msg: dict[str, Any]) -> None:
+            nonlocal responded
+            if tripped:
+                if msg["type"] == "http.response.start" and not responded:
+                    responded = True
+                    await _json_response(send, 413, {"detail": f"body exceeds {MAX_BODY_BYTES // 1024} KB"})
+                return   # 丟掉下游原本的回應
+            await send(msg)
+
+        await self.app(scope, capped_receive, guarded_send)
+
+
+async def _json_response(send: Any, status: int, body: dict[str, Any]) -> None:
+    raw = json.dumps(body).encode()
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(raw)).encode())]})
+    await send({"type": "http.response.body", "body": raw})
+
+
+app.add_middleware(GuardMiddleware)
 
 
 def throttle(request: Request, bucket: str) -> None:
@@ -445,7 +486,10 @@ async def post_clear(body: ClearInjectionBody, request: Request) -> dict[str, An
 @app.post("/api/tasks")
 async def post_task(body: NewTask, request: Request) -> dict[str, Any]:
     throttle(request, "mutate")
-    return server.engine.create_task(body.type, body.priority, body.source, body.destination, body.load_units)
+    try:
+        return server.engine.create_task(body.type, body.priority, body.source, body.destination, body.load_units)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/copilot")

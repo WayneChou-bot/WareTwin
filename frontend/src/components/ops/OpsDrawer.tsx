@@ -2,6 +2,8 @@
  * AI Operations 抽屜（Phase 4：可解釋決策 + KPI；Phase 5 在上方加 Copilot 對話）
  * 規格 2️⃣5️⃣：不只說「選 R04」，要列出 ✓ 理由與被拒絕者的原因。
  */
+import { useEffect } from "react";
+import { useFocusTrap } from "../ui/useFocusTrap";
 import { useStore, tickToClock } from "../../state/store";
 import { Copilot } from "./Copilot";
 
@@ -11,11 +13,13 @@ export function OpsDrawer() {
   const decisions = useStore((s) => s.twin.recent_decisions);
   const kpi = useStore((s) => s.twin.kpi);
   const select = useStore((s) => s.select);
+  const trap = useFocusTrap<HTMLElement>(open);
+  useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [open, setDrawer]);
   if (!open) return null;
   const e = kpi.efficiency, o = kpi.operation;
   return (
-    <aside className="drawer wide">
-      <header className="drawer-h"><span>AI Operations</span><button className="icon-btn" onClick={() => setDrawer(null)}>✕</button></header>
+    <aside className="drawer wide" role="dialog" aria-label="AI Operations" ref={trap} tabIndex={-1}>
+      <header className="drawer-h"><span>AI Operations</span><button className="icon-btn" aria-label="Close" onClick={() => setDrawer(null)}>✕</button></header>
       <div className="drawer-b">
         <h4 className="drawer-sub" style={{ marginTop: 0 }}>KPI</h4>
         <div className="kpi-grid">

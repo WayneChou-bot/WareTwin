@@ -330,3 +330,4 @@ table.dt.full td { white-space: normal; }
 .narrow-gate h2 { font-size: 18px; margin-top: 8px; }
 .narrow-gate p { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 420px; }
 .narrow-gate .btn { margin-top: 8px; font-size: 14px; padding: 8px 16px; }
+.form-err { grid-column: 1 / -1; font-size: 11.5px; color: #fbbf24; }

@@ -82,3 +82,16 @@ describe("SimEngine", () => {
     expect(eng.state.recent_events.some((e) => e.type === "ZONE_UNBLOCKED")).toBe(true);
   });
 });
+
+describe("task rules", () => {
+  it("rejects invalid task locations and survives a bad destination in state", () => {
+    const eng = new SimEngine(layoutJson as never, { seed: 1 });
+    expect(() => eng.createTask({ type: "PICK", priority: "NORMAL", source: "SHELF-A12", destination: "NOPE" })).toThrow(/destination/);
+    expect(() => eng.createTask({ type: "PICK", priority: "NORMAL", source: "SHELF-A12", destination: "CHG-01" })).toThrow(/charging/);
+    expect(() => eng.createTask({ type: "PICK", priority: "NORMAL", source: "PACK-01", destination: "SHELF-A12" })).toThrow(/source/);
+    const t = eng.createTask({ type: "PICK", priority: "NORMAL", source: "SHELF-A12", destination: "PACK-01" });
+    t.destination = "NOPE";
+    for (let i = 0; i < 1500; i++) eng.step();
+    expect(t.status).toBe("FAILED");
+  });
+});

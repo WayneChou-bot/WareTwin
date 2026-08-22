@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from .astar import NavGrid, astar, cell_center, is_walkable, nearest_walkable, to_cell
 from .navgrid import build_nav_grid
+from .rules import task_error
 
 # ─────────────────────────────────────────────────────────────
 # 常數（與 twin_state.ts THRESHOLDS / engine.ts SIM 相同）
@@ -201,6 +202,9 @@ class SimEngine:
             self.emit("ZONE_UNBLOCKED", "USER", "INFO", f"Zone {target_id} traffic restriction lifted", zone_id=target_id)
 
     def create_task(self, type_: str, priority: str, source: str, destination: str, load_units: int = 1) -> dict[str, Any]:
+        err = task_error(self.loc, type_, source, destination)
+        if err:
+            raise ValueError(err)
         tid = f"A{self.task_seq}"; self.task_seq += 1
         tick = self.state["sim"]["tick"]
         task = {"id": tid, "type": type_, "priority": priority, "status": "WAITING", "source": source, "destination": destination,
@@ -375,9 +379,15 @@ class SimEngine:
             r["velocity"] = 0
             rt.dwell -= 1
             if rt.dwell <= 0 and task:
+                dest = self.loc.get(task["destination"])
+                if not dest:   # 防禦：任務目的地不存在（正常不會發生，create_task 已驗證）→ 任務失敗、機器人回 IDLE，不能讓迴圈炸掉
+                    task["status"] = "FAILED"; task["completed_tick"] = tick
+                    self.emit("TASK_FAILED", "SIMULATION", "HIGH", f"Task #{task['id']} failed: unknown destination {task['destination']}", robot_id=r["id"], task_id=task["id"])
+                    r["current_task_id"] = None; r["destination"] = None; rt.phase = None; rt.goal_loc = None
+                    self._set_fsm(r, "IDLE"); return
                 r["load"]["current"] = min(r["load"]["capacity"], task["load_units"])
                 self.emit("TASK_STARTED", "ROBOT", "INFO", f"{r['id']} picked item at {self.pretty(task['source'])}", robot_id=r["id"], task_id=task["id"])
-                self._plan_to(r, rt, tuple(self.loc[task["destination"]]["access_point"]), "TO_DEST", task["destination"])
+                self._plan_to(r, rt, tuple(dest["access_point"]), "TO_DEST", task["destination"])
                 self._set_fsm(r, "TRANSPORTING")
         elif f == "TRANSPORTING":
             if not task:

@@ -17,12 +17,13 @@ uvicorn app.main:app --reload --port 8000
 
 然後另一個終端跑前端 `npm run dev`。前端啟動時會連 `ws://localhost:8000/ws`，TopBar 出現藍色 **BACKEND** 代表走後端；連不上會自動退回前端本地引擎並顯示橘色 **LOCAL**，後端起來後 3 秒內自動接回。
 
-環境變數：`TWIN_SEED`（預設 42）、`TWIN_DB`（預設 `twin.db`）。前端可用 `VITE_WS_URL` 覆寫後端位址。
+環境變數：`TWIN_SEED`（預設 42）、`TWIN_DB`（預設 `twin.db`）；公開部署的防護（`TWIN_CORS_ORIGINS`、`TWIN_CORS_REGEX`、`TWIN_TRUSTED_PROXIES`、`TWIN_RATE_LIMIT`、`TWIN_HEALTH_STALL_S`）見 `.env.example` 與根目錄 README「Running it in public」。前端可用 `VITE_WS_URL` 覆寫後端位址。
 
 ## 測試
 
 ```bash
-python -m pytest -q          # 14 tests：PRNG 與 JS 逐 bit 一致、A*、20 分鐘壓力、確定性、低電量、人員入侵、REST + WebSocket 協定
+pip install -r requirements-dev.txt
+python -m pytest -q          # 32 tests：PRNG 與 JS 逐 bit 一致、A*、20 分鐘壓力、確定性、低電量、人員入侵、感知、REST + WebSocket 協定、AI、What-if、防護層（rate limit / Origin / body 上限 / 任務地點）
 ```
 
 ## AI（Phase 5）
@@ -37,8 +38,8 @@ python -m pytest -q          # 14 tests：PRNG 與 JS 逐 bit 一致、A*、20 �
 
 | 路徑 | 說明 |
 |---|---|
-| `WS /ws` | 連線後先收 `FULL`，之後每 tick `PATCH`，每 30 tick 兩層 `HEATMAP`（TRAFFIC 短期 / CONGESTION 長期）。接受 `SIM_CONTROL` `INJECT` `CLEAR_INJECTION` `CREATE_TASK` `ACK_ALERT` `RESYNC` `COPILOT_ASK`（回 `COPILOT_REPLY`）；`WHATIF_RUN` 回 `NOT_IMPLEMENTED`（Phase 6） |
-| `GET /api/health` | tick、倍速、連線數、實際 tick rate |
+| `WS /ws` | 連線後先收 `FULL`，之後每 tick `PATCH`，每 30 tick 兩層 `HEATMAP`（TRAFFIC 短期 / CONGESTION 長期）。接受 `SIM_CONTROL` `INJECT` `CLEAR_INJECTION` `CREATE_TASK` `ACK_ALERT` `RESYNC` `COPILOT_ASK`（回 `COPILOT_REPLY`）；`WHATIF_RUN`（回 `WHATIF_RESULT`；同時只跑一個，每 IP 4 次/分） |
+| `GET /api/health` | tick、倍速、連線數、實際 tick rate；模擬 task 死掉或 10 秒沒推進回 `503`（Render 據此重啟） |
 | `GET /api/state` | 完整 TwinState |
 | `GET /api/state/validate` | 用 Pydantic 驗證目前 state 符合契約 |
 | `GET /api/events?limit&type&severity&robot_id&zone_id&since_tick` | 從 SQLite 查事件（Audit Log 用） |
@@ -70,7 +71,7 @@ Python 引擎 0.3 ms/tick（20 台機器人、7,000 格 A*）。10× 倍速需�
 
 ## 與 TypeScript 引擎的一致性
 
-`tests/test_engine.py::test_prng_matches_js` 確保亂數流 bit-level 相同，所以任務產生序列、指派結果、FSM 轉換在前 1,500 tick 完全一致。之後位置會逐漸分歧（最終 KPI 差距 < 5%）——原因是 A* 在**等成本路徑**上的 tie-break 順序不同（heap 實作差異），兩邊都是合法最短路徑。要做到 bit-level 一致需要統一 heap tie-break 規則，列入 Phase 6 What-if 前的待辦。
+`tests/test_engine.py::test_prng_matches_js` 確保亂數流 bit-level 相同，所以任務產生序列、指派結果、FSM 轉換在前 1,500 tick 完全一致。之後位置會逐漸分歧（最終 KPI 差距 < 5%）——原因是 A* 在**等成本路徑**上的 tie-break 順序不同（heap 實作差異），兩邊都是合法最短路徑。What-if 因此完全在後端跑（clone 同一個引擎），不依賴前後端 bit-level 一致；統一 heap tie-break 規則列在 Roadmap。
 
 ## 目錄
 

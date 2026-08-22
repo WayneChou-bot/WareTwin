@@ -2,7 +2,8 @@
  * 故障注入抽屜（規格 1️⃣3️⃣）：Robot Failure / Conveyor Failure / Sensor(Camera) Failure / Human Intrusion / Traffic Congestion / Task Burst
  * 下方列出「目前生效中」的注入（從 TwinState 推導，不另存狀態），可一鍵解除。
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useFocusTrap } from "../ui/useFocusTrap";
 import { layout, useStore } from "../../state/store";
 import { simControl } from "../../simulation/runner";
 import type { ScenarioInjection } from "../../schema/twin_state";
@@ -18,6 +19,8 @@ export function ScenariosDrawer() {
   const [duration, setDuration] = useState(60);
   const [level, setLevel] = useState(0.8);
   const [burst, setBurst] = useState(8);
+  const trap = useFocusTrap<HTMLElement>(open);
+  useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [open, setDrawer]);
   if (!open) return null;
 
   const fire = (inj: ScenarioInjection) => simControl.inject(inj);
@@ -32,8 +35,8 @@ export function ScenariosDrawer() {
   ];
 
   return (
-    <aside className="drawer">
-      <header className="drawer-h"><span>Scenario Injection</span><button className="icon-btn" onClick={() => setDrawer(null)}>✕</button></header>
+    <aside className="drawer" role="dialog" aria-label="Scenario Injection" ref={trap} tabIndex={-1}>
+      <header className="drawer-h"><span>Scenario Injection</span><button className="icon-btn" aria-label="Close" onClick={() => setDrawer(null)}>✕</button></header>
       <div className="drawer-b">
         <p className="hint">Inject failures into the LIVE simulation and watch the Fleet Manager, A* planner and KPIs react. Each row maps to a demo scenario.</p>
 

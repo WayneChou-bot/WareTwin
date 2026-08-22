@@ -5,7 +5,7 @@ services:
     runtime: python
     rootDir: backend
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.lock
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
@@ -18,4 +18,6 @@ services:
       - key: TWIN_CORS_ORIGINS
         value: https://ware-twin.vercel.app   # 你的 Vercel 網域，多個用逗號分隔（設了之後 WS/POST 會檢查 Origin）
       - key: TWIN_CORS_REGEX
-        value: https://.*\.vercel\.app        # 讓 Vercel 的 preview 網域也能連
+        value: https://ware-twin(-[a-z0-9-]+)?\.vercel\.app   # 只放自己專案的 Vercel preview（ware-twin-<hash>-<team>.vercel.app）
+      - key: TWIN_TRUSTED_PROXIES
+        value: "1"                            # Render 的 proxy 會把真實 IP 附加到 X-Forwarded-For 尾端

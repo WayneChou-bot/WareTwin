@@ -52,7 +52,7 @@ git clone https://github.com/WayneChou-bot/WareTwin.git && cd WareTwin
 # 後端
 cd backend
 conda create -n waretwin python=3.11 -y && conda activate waretwin
-pip install -r requirements-dev.txt   # runtime + pytest/httpx
+pip install -r requirements-dev.txt   # runtime + pytest/httpx (requirements.lock = fully pinned, used by Render/Docker)
 uvicorn app.main:app --reload --port 8000
 
 # 前端（另一個終端）
@@ -97,8 +97,8 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 26 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
-cd frontend && npm test                 # 9 個：TypeScript 引擎的相同契約
+cd backend && python -m pytest -q      # 32 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
+cd frontend && npm test                 # 10 個：TypeScript 引擎的相同契約
 ```
 
 ## ☁️ 部署
@@ -111,13 +111,13 @@ cd frontend && npm test                 # 9 個：TypeScript 引擎的相同契�
 
 | 防護 | 預設 |
 |---|---|
-| 輸入上限（Pydantic） | `TASK_BURST.count ≤ 30`、注入時長 ≤ 10 分鐘、What-if ≤ 8 個注入／10 分鐘、Copilot 問題 ≤ 500 字、VLM 影像 ≤ 400 KB |
-| Rate limit（每個 client IP，記憶體內） | 改變狀態 20 次/分 · Copilot 與 VLM 10 次/分 · What-if 4 次/分 · WebSocket 訊息 120 次/分 → `429` / `RATE_LIMITED` |
-| Origin 檢查 | 設了 `TWIN_CORS_ORIGINS` / `TWIN_CORS_REGEX` 後，WebSocket 與 POST 必須帶允許的 `Origin`（`TWIN_ALLOW_NO_ORIGIN=1` 可放行 curl） |
-| Body 大小 | REST 512 KB、WebSocket 單則 64 KB |
+| 輸入上限 | `TASK_BURST.count ≤ 30`、注入時長 ≤ 10 分鐘、What-if ≤ 8 個注入／10 分鐘、Copilot 問題 ≤ 500 字、VLM 影像 ≤ 400 KB；任務地點必須存在、符合任務類型、不可是充電樁（`sim/rules.py`，TS 同步） |
+| Rate limit（每個 client IP，記憶體內、會回收） | 改變狀態 20 次/分 · Copilot 與 VLM 10 次/分 · What-if 4 次/分 · WebSocket 訊息 120 次/分 → `429` / `RATE_LIMITED`。client IP 取 `X-Forwarded-For` 最後一段（`TWIN_TRUSTED_PROXIES`），無法偽造 |
+| Origin 檢查 | 設了 `TWIN_CORS_ORIGINS` / `TWIN_CORS_REGEX` 後，WebSocket 與 POST 必須帶允許的 `Origin`；regex 只放本專案自己的 Vercel preview（`TWIN_ALLOW_NO_ORIGIN=1` 可放行 curl） |
+| Body 大小 | REST 512 KB 在 ASGI stream 層以實際 bytes 計算（chunked／造假 `Content-Length` 都擋）、WebSocket 單則 64 KB（UTF-8 bytes） |
 | Health | 模擬 task 死掉或超過 `TWIN_HEALTH_STALL_S` 秒沒推進，`/api/health` 回 `503`，Render 會自動重啟 |
 
-讀取（`/api/state`、`/api/health`…）不受限；本機開發可設 `TWIN_RATE_LIMIT=0` 關掉。介面為 desktop-only（≥ 1280 px），手機會看到提示頁而不是縮到 0.25 倍的畫面。審計紀錄存在 instance 上的 SQLite，free tier 更換 instance 時會重置。
+讀取（`/api/state`、`/api/health`…）不受限；本機開發可設 `TWIN_RATE_LIMIT=0` 關掉。介面為桌面設計（≥ 1280 px 最佳，1024 px 起可用），更窄的螢幕會看到提示頁而不是縮到 0.25 倍的畫面，且提示頁背後不會啟動模擬。審計紀錄存在 instance 上的 SQLite，free tier 更換 instance 時會重置。
 
 ## 🗺 Roadmap
 

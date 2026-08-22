@@ -42,7 +42,8 @@ export const simControl = {
   },
   createTask(task: { type: TaskType; priority: TaskPriority; source: string; destination: string; load_units?: number }) {
     const st = useStore.getState();
-    if (st.source === "online") wsSend({ type: "CREATE_TASK", task: { load_units: 1, ...task } }); else getEngine().createTask(task);
+    if (st.source === "online") { wsSend({ type: "CREATE_TASK", task: { load_units: 1, ...task } }); return; }
+    try { getEngine().createTask(task); } catch (e) { st.setNotice(`Task rejected: ${(e as Error).message}`); }
   },
   clearInjection(kind: ScenarioInjection["kind"], target_id: string) {
     const st = useStore.getState();

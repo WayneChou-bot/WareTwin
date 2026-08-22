@@ -10,7 +10,8 @@
         whatif  What-if                                  4 次 / 分鐘
         ws      每條 WebSocket 的訊息總量                120 次 / 分鐘
     TWIN_RATE_LIMIT=0 可關閉（測試／本機）。
-  - Body 大小上限：REST 512 KB、WS 單則訊息 64 KB（VLM 影像走 REST）。
+  - Body 大小上限：REST 512 KB（在 ASGI receive 層以實際 bytes 計算）、WS 單則訊息 64 KB（UTF-8 bytes）。
+  - 任務地點：由 app/sim/rules.py 驗證（存在、非充電樁、不相同、符合 TaskType）。
 """
 from __future__ import annotations
 
@@ -36,8 +37,16 @@ def rate_limit_enabled() -> bool:
 
 
 class RateLimiter:
+    GC_EVERY = 500   # 每 N 次 check 掃一次過期 key，避免大量不同 IP 永久留在記憶體
+
     def __init__(self) -> None:
         self._hits: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
+        self._calls = 0
+
+    def _gc(self, now: float) -> None:
+        dead = [k for k, q in self._hits.items() if not q or now - q[-1] > LIMITS[k[0]][1]]
+        for k in dead:
+            del self._hits[k]
 
     def check(self, bucket: str, key: str) -> tuple[bool, float]:
         """回傳 (允許?, 需等待秒數)。"""
@@ -45,6 +54,9 @@ class RateLimiter:
             return True, 0.0
         limit, window = LIMITS[bucket]
         now = time.monotonic()
+        self._calls += 1
+        if self._calls % self.GC_EVERY == 0:
+            self._gc(now)
         q = self._hits[(bucket, key)]
         while q and now - q[0] > window:
             q.popleft()
@@ -61,11 +73,16 @@ limiter = RateLimiter()
 
 
 def client_key(headers: dict[str, str] | None, host: str | None) -> str:
-    """Render / Vercel 等反向代理會放 X-Forwarded-For，第一個才是真正的 client。"""
+    """反向代理（Render）會把真實 client IP **附加**到 X-Forwarded-For 尾端，client 自己塞的假值在前面；
+    所以要取「倒數第 TWIN_TRUSTED_PROXIES 個」（預設 1 = 最後一段，即 proxy 親眼看到的連線）。
+    TWIN_TRUSTED_PROXIES=0 = 不信任 header，直接用連線來源（本機開發）。"""
     h = {k.lower(): v for k, v in (headers or {}).items()}
+    n = int(os.environ.get("TWIN_TRUSTED_PROXIES", "1"))
     xff = h.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
+    if xff and n > 0:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-n] if len(parts) >= n else parts[0]
     return host or "unknown"
 
 

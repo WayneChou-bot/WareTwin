@@ -4,8 +4,9 @@
  *  「Apply to LIVE」把同一組注入打到 LIVE。
  */
 import { useEffect, useState } from "react";
+import { useFocusTrap } from "../ui/useFocusTrap";
 import { useStore, tickToClock } from "../../state/store";
-import { wsSend, onWhatIfResult } from "../../services/ws";
+import { wsSend, onWhatIfResult, onWhatIfError, markWhatIfPending } from "../../services/ws";
 import { simControl } from "../../simulation/runner";
 import type { ScenarioInjection, TwinEvent } from "../../schema/twin_state";
 
@@ -40,13 +41,17 @@ export function WhatIfDrawer() {
   const [dur, setDur] = useState(300);
   const [baseline, setBaseline] = useState(true);
   const [running, setRunning] = useState(false);
-  useEffect(() => onWhatIfResult((r) => { setResult(r as WhatIfResultEx); setRunning(false); }), [setResult]);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => onWhatIfResult((r) => { setResult(r as WhatIfResultEx); setRunning(false); setErr(null); }), [setResult]);
+  useEffect(() => onWhatIfError((m) => { setRunning(false); setErr(m); }), []);
+  const trap = useFocusTrap<HTMLElement>(open);
+  useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [open, setDrawer]);
   if (!open) return null;
 
   const injections = () => PRESETS.filter((p) => sel.has(p.id)).map((p) => p.build());
   const run = () => {
     if (source !== "online" || sel.size === 0) return;
-    setRunning(true);
+    setRunning(true); setErr(null); markWhatIfPending(true);
     wsSend({ type: "WHATIF_RUN", request: { scenario_name: PRESETS.filter((p) => sel.has(p.id)).map((p) => p.label).join(" + "), injections: injections(), duration_ticks: dur * 10, run_baseline: baseline } });
   };
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -54,8 +59,8 @@ export function WhatIfDrawer() {
   const pctText = (k: string, b: number, s: number) => (k === "on_time_rate" || k === "utilization" || k === "congestion_index") ? `${((s - b) * 100).toFixed(0) === "0" ? "±0" : ((s - b) * 100 > 0 ? "+" : "") + ((s - b) * 100).toFixed(0)} pt` : b ? `${s - b > 0 ? "+" : ""}${(((s - b) / b) * 100).toFixed(0)}%` : "";
 
   return (
-    <aside className="drawer wide">
-      <header className="drawer-h"><span>What-if Simulation</span><button className="icon-btn" onClick={() => setDrawer(null)}>✕</button></header>
+    <aside className="drawer wide" role="dialog" aria-label="What-if Simulation" ref={trap} tabIndex={-1}>
+      <header className="drawer-h"><span>What-if Simulation</span><button className="icon-btn" aria-label="Close" onClick={() => setDrawer(null)}>✕</button></header>
       <div className="drawer-b">
         <p className="hint">Two clones of the current twin state: Baseline runs as-is, Scenario runs with the injected failures. Same random seed, so the difference comes only from the failures. LIVE is never touched.</p>
         <h4 className="drawer-sub" style={{ marginTop: 0 }}>Scenario</h4>
@@ -74,6 +79,7 @@ export function WhatIfDrawer() {
           <button className="btn primary" disabled={running || source !== "online" || sel.size === 0} onClick={run}>{running ? "Simulating…" : "RUN"}</button>
         </div>
         {source !== "online" && <div className="hint">What-if runs on the backend (clone of the live engine). Start the backend to enable.</div>}
+        {err && <div className="form-err" style={{ marginTop: 6 }}>⚠ {err}</div>}
 
         {result && (
           <>

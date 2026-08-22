@@ -38,17 +38,19 @@ function Notice() {
   return <div className={"notice " + notice.kind} onClick={() => setNotice(null)}>{notice.text}</div>;
 }
 
-/** 這是 desktop 營運中心；窄螢幕（手機）整體縮到 0.3 倍根本看不清，先給提示，可選擇仍然繼續 */
+/** 這是 desktop 營運中心；窄螢幕（手機）整體縮到 0.3 倍根本看不清，先給提示，可選擇仍然繼續。
+ *  門檻 1024：平板橫向（1024–1279）仍可用縮小版；手機一律提示。 */
+const GATE_W = 1024;
 function NarrowScreenGate({ children }: { children: React.ReactNode }) {
   const [dismissed, setDismissed] = useState(false);
-  const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
-  useEffect(() => { const f = () => setNarrow(window.innerWidth < 900); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < GATE_W);
+  useEffect(() => { const f = () => setNarrow(window.innerWidth < GATE_W); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   if (narrow && !dismissed) {
     return (
       <div className="narrow-gate">
         <div className="brand"><span className="ai">Ware</span><span>Twin</span></div>
         <h2>Designed for desktop</h2>
-        <p>WareTwin is a 3D operations console laid out for screens ≥ 1280 px wide. On a phone the interface is scaled to about a quarter of its size and becomes unreadable.</p>
+        <p>WareTwin is a 3D operations console that works best on screens ≥ 1280 px wide (it still runs, scaled down, from 1024 px). On a phone the interface would shrink to about a quarter of its size and become unreadable.</p>
         <p>Open <b>ware-twin.vercel.app</b> on a laptop or desktop browser for the full experience.</p>
         <button className="btn" onClick={() => setDismissed(true)}>Continue anyway</button>
       </div>
@@ -57,11 +59,11 @@ function NarrowScreenGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function App() {
+/** 模擬 runner 放在 gate 內層：手機提示頁顯示時不啟動 WebSocket 與本地引擎，不白耗 CPU */
+function Console() {
   useFitScale();
   useSimulationRunner();
   return (
-    <NarrowScreenGate>
     <div className="shell">
       <TopBar />
       <div className="shell-body">
@@ -89,6 +91,9 @@ export default function App() {
       <Modals />
       <Notice />
     </div>
-    </NarrowScreenGate>
   );
+}
+
+export default function App() {
+  return <NarrowScreenGate><Console /></NarrowScreenGate>;
 }

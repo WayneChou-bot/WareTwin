@@ -10,16 +10,20 @@ import { simControl } from "../../simulation/runner";
 import { API_URL } from "../../services/ws";
 import type { TwinEvent, TaskPriority, TaskType } from "../../schema/twin_state";
 import { Dot } from "../ui/primitives";
+import { useFocusTrap } from "../ui/useFocusTrap";
 import { percText } from "../panels/RightPanels";
+import { taskError } from "../../simulation/rules";
 
 export function Modals() {
   const modal = useStore((s) => s.modal);
   const setModal = useStore((s) => s.setModal);
   useEffect(() => { const h = (e: KeyboardEvent) => e.key === "Escape" && setModal(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [setModal]);
+  const trap = useFocusTrap<HTMLDivElement>(!!modal);
   if (!modal) return null;
+  const titles = { audit: "Audit / Event Log", tasks: "Tasks", robot: "Robot details", fleet: "Robot fleet" } as const;
   return (
     <div className="modal-bg" onClick={() => setModal(null)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={titles[modal]} tabIndex={-1} ref={trap} onClick={(e) => e.stopPropagation()}>
         {modal === "audit" && <AuditLog />}
         {modal === "tasks" && <TaskTable />}
         {modal === "robot" && <RobotDetail />}
@@ -31,7 +35,7 @@ export function Modals() {
 
 function Head({ title, children }: { title: string; children?: React.ReactNode }) {
   const setModal = useStore((s) => s.setModal);
-  return <header className="modal-h"><span>{title}</span><span className="spacer" />{children}<button className="icon-btn" onClick={() => setModal(null)}>✕</button></header>;
+  return <header className="modal-h"><span>{title}</span><span className="spacer" />{children}<button className="icon-btn" aria-label="Close" onClick={() => setModal(null)}>✕</button></header>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -94,17 +98,19 @@ function TaskTable() {
   const rows = Object.values(tasks).filter((t) => !status || t.status === status).sort((a, b) => order[a.status] - order[b.status] || b.created_tick - a.created_tick);
   const pretty = (id: string) => { const l = locs[id]; if (!l) return id; return l.kind === "SHELF" ? `Shelf ${id.replace("SHELF-", "")}` : id.replace("-", " "); };
   const opts = layout.locations.filter((l) => l.kind !== "CHARGING");
+  const err = taskError(locs, type, source, dest);
   return (
     <>
       <Head title="Tasks" />
       <div className="modal-b">
-        <form className="form" onSubmit={(e) => { e.preventDefault(); simControl.createTask({ type, priority, source, destination: dest }); }}>
+        <form className="form" onSubmit={(e) => { e.preventDefault(); if (!err) simControl.createTask({ type, priority, source, destination: dest }); }}>
           <label>Type<select value={type} onChange={(e) => setType(e.target.value as TaskType)}>{["PICK", "TRANSPORT", "REPLENISH", "RETURN"].map((t) => <option key={t}>{t}</option>)}</select></label>
           <label>Priority<select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>{["LOW", "NORMAL", "HIGH", "CRITICAL"].map((t) => <option key={t}>{t}</option>)}</select></label>
           <label>Source<select value={source} onChange={(e) => setSource(e.target.value)}>{opts.map((l) => <option key={l.id} value={l.id}>{pretty(l.id)}</option>)}</select></label>
           <label>Destination<select value={dest} onChange={(e) => setDest(e.target.value)}>{opts.map((l) => <option key={l.id} value={l.id}>{pretty(l.id)}</option>)}</select></label>
           <label>Filter<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.keys(order).map((s) => <option key={s}>{s}</option>)}</select></label>
-          <button className="btn primary" type="submit">+ Create task</button>
+          <button className="btn primary" type="submit" disabled={!!err} title={err ?? "Create task"}>+ Create task</button>
+          {err && <span className="form-err">{err}</span>}
         </form>
         <table className="dt full">
           <thead><tr><th>Task</th><th>Type</th><th>Priority</th><th>Status</th><th>From</th><th>To</th><th>Robot</th><th>Created</th><th>Assigned</th><th>Completed</th><th>Duration</th><th>Parent</th></tr></thead>

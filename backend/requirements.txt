@@ -1,4 +1,4 @@
-# Runtime（Render / Docker 用；版本鎖定 minor，確保 build 可重現）
+# Runtime 直接相依（範圍鎖定 minor）。完整可重現的版本在 requirements.lock（Render / Docker 使用）。
 fastapi>=0.115,<0.142
 uvicorn[standard]>=0.30,<0.47
 pydantic>=2.7,<3
