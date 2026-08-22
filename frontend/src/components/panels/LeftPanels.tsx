@@ -4,8 +4,9 @@ import { simControl } from "../../simulation/runner";
 
 export function FleetOverviewPanel() {
   const f = useStore((s) => s.twin.kpi.fleet);
+  const setModal = useStore((s) => s.setModal);
   return (
-    <Panel title="Fleet Overview">
+    <Panel title="Fleet Overview" action={<button className="link" onClick={() => setModal("fleet")}>Robot list →</button>}>
       <StatRow label="Total Robots" value={f.total} big />
       <StatRow label="Active" value={f.active} color={STATUS_COLOR.ACTIVE} />
       <StatRow label="Charging" value={f.charging} color={STATUS_COLOR.CHARGING} />

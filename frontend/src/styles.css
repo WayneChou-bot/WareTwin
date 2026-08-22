@@ -320,3 +320,4 @@ table.dt.full td { white-space: normal; }
 .ai-mode { font-size: 11px; padding: 5px 8px; border-radius: 4px; border: 1px solid; line-height: 1.4; }
 .ai-mode.demo { color: #fbbf24; border-color: #78350f; background: #1a1608; }
 .ai-mode.llm { color: #c4b5fd; border-color: #6d28d9; background: #1a1030; }
+.chip.on { color: var(--text); border-color: var(--accent); background: rgba(59,130,246,.15); }

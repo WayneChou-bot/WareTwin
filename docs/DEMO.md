@@ -14,6 +14,7 @@
 | 08 | What-if R07 Failure | What-if → 勾 R07 failure → 5 min → RUN | 對照表：Baseline vs Scenario；說明「車隊有餘裕，吞吐只掉 2%、任務時間 +x s」；再勾 Conveyor #03 + Peak demand 重跑，看差異放大；**Apply scenario to LIVE** |
 | 09 | AI Optimization | 先做 04 或 10 → AI Ops → 問「Why is throughput dropping?」「How can we improve throughput?」 | 回答引用 CV03 / Zone / 機器人 id，可點擊跳轉；回覆底下顯示 `gpt-4o-mini`（或 `rule-based`） |
 | 10 | AI Autonomous Decision | Scenarios → **Demo 10 · Compound → Run all three** | 三個 Alert 同時出現；Event Log 追溯鏈：Human detected → Zone B BLOCKED → CV03 STOPPED → R07 re-queued → Rx assigned (AI decision) → rerouted；AI Ops 問「Which conveyor is the bottleneck?」；What-if 跑同一組比較「如果沒處理會怎樣」 |
+| 11 | On-robot Perception | Fleet Overview → **Robot list →** → 挑一台 Perception 為 SLOWING / STOPPED 的機器人（鏡頭自動聚焦）；或 Scenarios → Task Burst 20 讓走道變擠 | 3D 裡選取的機器人有 270° 感測扇形（青 = CLEAR、橘 = SLOWING、紅 = STOPPED），射線指向看到的機器人／人員；Selected Robot 的 Perception 列顯示「STOPPED · ahead 1.6 m · R12 1.6 m」；Event Log「R07 LiDAR: R12 ahead 1.6 m — holding」；其他因感知停車的機器人前方出現紅弧 |
 
 ## 講稿重點（30 秒版）
 

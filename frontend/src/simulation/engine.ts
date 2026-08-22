@@ -11,7 +11,7 @@
 import type { WarehouseLayout, LayoutLocation } from "../layout/types";
 import { buildNavGrid } from "../layout/navgrid";
 import type {
-  TwinState, RobotState, TaskState, TwinEvent, AlertState, AiDecision, DecisionCandidate,
+  TwinState, PerceivedObstacle, RobotState, TaskState, TwinEvent, AlertState, AiDecision, DecisionCandidate,
   GridCell, RobotFsmState, RobotStatus, EventType, Severity, TaskPriority, ScenarioInjection,
 } from "../schema/twin_state";
 import { THRESHOLDS } from "../schema/twin_state";
@@ -35,7 +35,14 @@ export const SIM = {
   MAX_WAITING_TASKS: 12,
   WAIT_REPLAN_TICKS: 25,     // 被擋 2.5 s 後重新規劃
   WAIT_BACKOFF_TICKS: 80,    // 被擋 8 s 仍無解 → 讓路 (deadlock breaker)
-  STATION_ARRIVE_CELLS: 3,   // 距工作站 ≤3 格且前方被佔 → 就地作業 (多台同時上貨，不排單一格)
+  STATION_ARRIVE_CELLS: 3,
+  // Phase 7：虛擬 LiDAR 與局部避障
+  LIDAR_RANGE: 4.0,          // m
+  LIDAR_FOV: Math.PI * 1.5,  // 270°
+  PERC_STOP: 1.7,            // 前方動態障礙中心距 < 1.7 m → 停車（車身 1.3 m，留 0.4 m）
+  PERC_SLOW: 2.8,            // < 2.8 m → 減速
+  PERC_LOOKAHEAD: 3,         // 只對「位於我接下來 3 格路徑上」的動態障礙反應（不在路徑上的交會車不停）
+  PERC_EVENT_TICKS: 200,     // 同一台機器人的感知事件節流   // 距工作站 ≤3 格且前方被佔 → 就地作業 (多台同時上貨，不排單一格)
   ON_TIME_LIMIT_TICKS: 2400, // 4 min 內完成算準時
   IDLE_TO_PARK_TICKS: 300,   // 閒置 30 s 回停車區
   KPI_EVERY: 10,
@@ -61,6 +68,10 @@ interface RobotRt {
   chargerId: string | null;
   idleTicks: number;
   lastBatteryAlert: "NONE" | "WARN" | "CRIT";
+  /** 感知：正前方最近動態障礙 (robot / person id) 與其中心距 */
+  frontId: string | null;
+  frontDist: number;
+  lastPercEvent: number;
 }
 
 export interface EngineOptions { seed?: number; initialState?: TwinState }
@@ -100,7 +111,8 @@ export class SimEngine {
     this.rng = mulberry32(seed);
     for (const c of layout.charging_stations) this.chargerBusy[c.id] = null;
     this.state = opts.initialState ? JSON.parse(JSON.stringify(opts.initialState)) : this.buildInitialState(seed);
-    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE" };
+    for (const r of Object.values(this.state.robots)) if (!r.perception) r.perception = { state: "CLEAR", ahead_m: SIM.LIDAR_RANGE, nearest_m: null, obstacles: [] };
+    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9 };
     this.nextTaskTick = this.state.sim.tick + 10;
   }
 
@@ -116,6 +128,7 @@ export class SimEngine {
         battery: sp.battery, status: "IDLE", fsm: "IDLE", health: 95 + Math.floor(this.rng() * 5), current_task_id: null, destination: null,
         path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0,
         stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 },
+        perception: { state: "CLEAR", ahead_m: SIM.LIDAR_RANGE, nearest_m: null, obstacles: [] },
       };
     }
     return {
@@ -176,6 +189,7 @@ export class SimEngine {
     this.generateTasks();
     this.assignTasks();
     this.rebuildOccupancy();
+    for (const id of Object.keys(S.robots)) this.updatePerception(S.robots[id], this.rt[id]);
     for (const id of Object.keys(S.robots)) this.stepRobot(S.robots[id], this.rt[id]);
     this.updateZones();
     this.decayTraffic();
@@ -423,7 +437,19 @@ export class SimEngine {
       const a = this.occupancy.get(cellKey(next[0], myCell[1])), b = this.occupancy.get(cellKey(myCell[0], next[1]));
       if (a && a !== r.id) occ = a; else if (b && b !== r.id) occ = b;
     }
-    if (entering && occ && occ !== r.id) {
+    // 感知層：正前方 < PERC_STOP 有動態障礙（別台機器人 / 人）也視為被擋 —— 比格子預約早一格停下，車身不再貼在一起
+    let blockedBy: string | null = entering && occ && occ !== r.id ? occ : null;
+    const percStop = rt.frontId !== null && rt.frontDist < SIM.PERC_STOP;
+    if (!blockedBy && percStop) blockedBy = rt.frontId;
+    if (blockedBy) {
+      occ = blockedBy;
+      if (percStop && r.perception.state !== "STOPPED") {
+        r.perception.state = "STOPPED";
+        if (this.state.sim.tick - rt.lastPercEvent > SIM.PERC_EVENT_TICKS && rt.frontId && this.state.robots[rt.frontId]) {
+          rt.lastPercEvent = this.state.sim.tick;
+          this.emit("OBSTACLE_DETECTED", "ROBOT", "LOW", `${r.id} LiDAR: ${rt.frontId} ahead ${rt.frontDist.toFixed(1)} m — holding`, { robot_id: r.id });
+        }
+      }
       const remaining0 = r.path.length - r.path_index;
       // 工作站前排隊：距目標 ≤ N 格就視為到達、就地作業（避免 10 台排同一格造成死鎖）
       if (!rt.backingOff && remaining0 <= SIM.STATION_ARRIVE_CELLS && (rt.phase === "TO_SOURCE" || rt.phase === "TO_DEST")) {
@@ -432,7 +458,8 @@ export class SimEngine {
       r.velocity = Math.max(0, r.velocity - SIM.ACCEL * SIM.TICK_S * 2);
       rt.waitTicks++; r.stats.wait_ticks++;
       const other = this.state.robots[occ];
-      const mutual = !!other && other.path_index < other.path.length && other.path[other.path_index][0] === myCell[0] && other.path[other.path_index][1] === myCell[1];
+      // 互相擋住：對方下一格是我這格，或對方的 LiDAR 正前方也是我（面對面）
+      const mutual = !!other && ((other.path_index < other.path.length && other.path[other.path_index][0] === myCell[0] && other.path[other.path_index][1] === myCell[1]) || this.rt[other.id].frontId === r.id);
       if (mutual && rt.waitTicks > 10 && this.yieldsTo(r, other)) { this.backOff(r, rt); return; }
       if (rt.waitTicks === SIM.WAIT_REPLAN_TICKS) { this.emit("OBSTACLE_DETECTED", "ROBOT", "LOW", `${r.id} blocked by ${occ} — replanning`, { robot_id: r.id }); this.setFsm(r, "OBSTACLE_DETECTED"); }
       else if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) { this.backOff(r, rt); }
@@ -450,7 +477,9 @@ export class SimEngine {
     let dh = desiredHeading - r.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
     const turning = Math.abs(dh) > 0.3;
     const remaining = r.path.length - r.path_index;
-    const vmax = r.max_speed * (turning ? SIM.TURN_SLOW : 1) * (remaining <= 1 ? 0.5 : 1) * (this.grid.cells[next[1] * this.grid.cols + next[0]] === 2 ? 0.6 : 1) * (this.congestedZones.size ? this.zoneSpeedFactor(next) : 1);
+    const slowing = rt.frontId !== null && rt.frontDist < SIM.PERC_SLOW;
+    if (slowing) r.perception.state = "SLOWING";
+    const vmax = r.max_speed * (turning ? SIM.TURN_SLOW : 1) * (remaining <= 1 ? 0.5 : 1) * (this.grid.cells[next[1] * this.grid.cols + next[0]] === 2 ? 0.6 : 1) * (this.congestedZones.size ? this.zoneSpeedFactor(next) : 1) * (slowing ? 0.45 : 1);
     r.velocity = Math.min(vmax, r.velocity + SIM.ACCEL * SIM.TICK_S);
     r.heading += Math.sign(dh) * Math.min(Math.abs(dh), 4.0 * SIM.TICK_S);
     const stepLen = Math.min(dist, r.velocity * SIM.TICK_S);
@@ -503,6 +532,60 @@ export class SimEngine {
     return len;
   }
   private updateEta(r: RobotState) { r.eta_s = r.path.length ? Math.round(this.remainingPathLength(r) / (r.max_speed * 0.8)) : null; }
+
+  // ─────────────────────────────────────────────────────────
+  // Phase 7：虛擬 LiDAR 感知（270° / 4 m）
+  //  - 動態障礙：其他機器人、人員（需在視野內且無貨架遮擋）
+  //  - 靜態：沿航向射線步進到第一個不可走格 → ahead_m
+  //  - 正前方（方位 < 40°、橫向偏移 < 0.75 m）最近的動態障礙決定 STOPPED / SLOWING
+  // ─────────────────────────────────────────────────────────
+  private lineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
+    const d = Math.hypot(x1 - x0, z1 - z0); const n = Math.max(1, Math.ceil(d / 0.5));
+    for (let i = 1; i < n; i++) { const t = i / n; const c = toCell(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t); if (!isWalkable(this.grid, c[0], c[1])) return false; }
+    return true;
+  }
+  private updatePerception(r: RobotState, rt: RobotRt) {
+    const P = r.perception;
+    if (r.fsm === "OFFLINE") { P.state = "OFF"; P.obstacles = []; P.nearest_m = null; P.ahead_m = 0; rt.frontId = null; rt.frontDist = Infinity; return; }
+    const [x, , z] = r.position; const h = r.heading; const cosH = Math.cos(h), sinH = Math.sin(h);
+    const obs: PerceivedObstacle[] = [];
+    const consider = (kind: "ROBOT" | "HUMAN", id: string, ox: number, oz: number) => {
+      const dx = ox - x, dz = oz - z; const dist = Math.hypot(dx, dz);
+      if (dist > SIM.LIDAR_RANGE || dist < 1e-6) return;
+      let b = Math.atan2(dz, dx) - h; while (b > Math.PI) b -= 2 * Math.PI; while (b < -Math.PI) b += 2 * Math.PI;
+      if (Math.abs(b) > SIM.LIDAR_FOV / 2) return;
+      if (!this.lineOfSight(x, z, ox, oz)) return;
+      obs.push({ kind, id, distance_m: Math.round(dist * 10) / 10, bearing_deg: Math.round((-b * 180) / Math.PI) });
+    };
+    for (const id in this.state.robots) { if (id === r.id) continue; const o = this.state.robots[id]; consider("ROBOT", id, o.position[0], o.position[2]); }
+    for (const id in this.state.people) { const p = this.state.people[id]; consider("HUMAN", id, p.position[0], p.position[2]); }
+    // 正前方射線（靜態）
+    let ahead = SIM.LIDAR_RANGE;
+    for (let d = 0.5; d <= SIM.LIDAR_RANGE; d += 0.25) { const c = toCell(x + cosH * d, z + sinH * d); if (!isWalkable(this.grid, c[0], c[1])) { ahead = d; break; } }
+    if (ahead < SIM.LIDAR_RANGE) obs.push({ kind: "RACK", id: null, distance_m: Math.round(ahead * 10) / 10, bearing_deg: 0 });
+    obs.sort((a, b) => a.distance_m - b.distance_m || (a.id ?? "").localeCompare(b.id ?? ""));
+    // 會擋到我的動態障礙：位於我接下來 PERC_LOOKAHEAD 格路徑上（含斜向的正交鄰格）的最近一個
+    let frontId: string | null = null, frontDist = Infinity;
+    if (r.path_index < r.path.length) {
+      const onPath = new Set<string>(); let prev = toCell(x, z);
+      for (let i = r.path_index; i < Math.min(r.path.length, r.path_index + SIM.PERC_LOOKAHEAD); i++) {
+        const c = r.path[i]; onPath.add(cellKey(c[0], c[1]));
+        if (c[0] !== prev[0] && c[1] !== prev[1]) { onPath.add(cellKey(c[0], prev[1])); onPath.add(cellKey(prev[0], c[1])); }
+        prev = c;
+      }
+      for (const o of obs) {
+        if (o.kind === "RACK" || o.id === null) continue;
+        const pos = o.kind === "ROBOT" ? this.state.robots[o.id].position : this.state.people[o.id].position;
+        const c = toCell(pos[0], pos[2]);
+        if (onPath.has(cellKey(c[0], c[1])) && o.distance_m < frontDist) { frontDist = o.distance_m; frontId = o.id; }
+      }
+    }
+    rt.frontId = frontId; rt.frontDist = frontDist;
+    P.obstacles = obs.slice(0, 5);
+    P.nearest_m = obs.length ? obs[0].distance_m : null;
+    P.ahead_m = Math.round(Math.min(ahead, frontId ? frontDist : ahead) * 10) / 10;
+    P.state = "CLEAR"; // moveAlongPath 視情況改成 SLOWING / STOPPED
+  }
 
   private rebuildOccupancy() {
     this.occupancy.clear();

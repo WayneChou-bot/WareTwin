@@ -6,9 +6,10 @@ import { STATUS_COLOR, SEVERITY_COLOR, layout, tickToClock, useStore } from "../
 import { Dot, Panel } from "../ui/primitives";
 import { RobotMesh } from "../scene/Robots";
 import { SceneContent } from "../scene/Scene3D";
+import type { RobotState } from "../../schema/twin_state";
 
 function RobotThumb({ status }: { status: string }) {
-  const r = useMemo(() => ({ id: "", model: "AMR-L", position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 } }), [status]);
+  const r = useMemo(() => ({ id: "", model: "AMR-L", position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 }, perception: { state: "CLEAR" as const, ahead_m: 4, nearest_m: null, obstacles: [] } }), [status]);
   return (
     <Canvas resize={{ offsetSize: true }} dpr={1} camera={{ position: [2.2, 1.6, 2.2], fov: 32 }} gl={{ alpha: true, antialias: true }} style={{ background: "transparent" }}>
       <ambientLight intensity={0.8} /><directionalLight position={[3, 5, 2]} intensity={2} /><pointLight position={[-2, 1, -2]} color="#60a5fa" intensity={4} />
@@ -47,12 +48,21 @@ export function SelectedRobotPanel() {
         <span className="est">Estimated {estH.toFixed(1)} h</span>
       </div>
       <div className="kv"><span className="k">State</span><span className="v" style={{ fontFamily: "var(--mono)", fontSize: 11.5 }}>{r.fsm}{r.velocity > 0.05 ? ` · ${r.velocity.toFixed(2)} m/s` : ""}{r.eta_s ? ` · ETA ${r.eta_s}s` : ""}</span></div>
+      <div className="kv"><span className="k">Perception</span><span className="v" style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: PERC_COLOR[r.perception?.state ?? "OFF"] }} title="Virtual LiDAR 270° / 4 m">{percText(r)}</span></div>
       <div className="kv"><span className="k">Current Task</span><span className="v">{task ? `#${task.id}  ${task.type[0] + task.type.slice(1).toLowerCase()}` : "—"}</span></div>
       <div className="kv"><span className="k">From</span><span className="v">{pretty(task?.source)}</span></div>
       <div className="kv"><span className="k">To</span><span className="v">{pretty(task?.destination ?? r.destination)}</span></div>
       <button className="btn-outline" onClick={() => setModal("robot")}>View Details</button>
     </Panel>
   );
+}
+
+const PERC_COLOR = { CLEAR: "#22d3ee", SLOWING: "#f59e0b", STOPPED: "#ef4444", OFF: "#64748b" } as const;
+export function percText(r: RobotState): string {
+  const P = r.perception; if (!P || P.state === "OFF") return "OFF";
+  const dyn = P.obstacles.find((o) => o.kind !== "RACK");
+  const who = dyn ? ` · ${dyn.id} ${dyn.distance_m.toFixed(1)} m` : "";
+  return `${P.state} · ahead ${P.ahead_m.toFixed(1)} m${who}`;
 }
 
 export function LiveCameraPanel() {

@@ -10,6 +10,7 @@ import { simControl } from "../../simulation/runner";
 import { API_URL } from "../../services/ws";
 import type { TwinEvent, TaskPriority, TaskType } from "../../schema/twin_state";
 import { Dot } from "../ui/primitives";
+import { percText } from "../panels/RightPanels";
 
 export function Modals() {
   const modal = useStore((s) => s.modal);
@@ -22,6 +23,7 @@ export function Modals() {
         {modal === "audit" && <AuditLog />}
         {modal === "tasks" && <TaskTable />}
         {modal === "robot" && <RobotDetail />}
+        {modal === "fleet" && <FleetList />}
       </div>
     </div>
   );
@@ -116,6 +118,59 @@ function TaskTable() {
                 <td>{t.completed_tick !== null ? `${((t.completed_tick - t.created_tick) / 10).toFixed(0)}s` : "—"}</td><td>{t.parent_task_id ?? ""}</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+/** 機器人清單：點任一列 → 選取該機器人（3D 鏡頭自動聚焦）並關閉；可依狀態篩選、欄位排序 */
+function FleetList() {
+  const robots = useStore((s) => s.twin.robots);
+  const tasks = useStore((s) => s.twin.tasks);
+  const select = useStore((s) => s.select);
+  const setModal = useStore((s) => s.setModal);
+  const [status, setStatus] = useState("");
+  const [sort, setSort] = useState<"id" | "battery" | "status" | "tasks" | "distance">("id");
+  const rows = useMemo(() => {
+    const list = Object.values(robots).filter((r) => !status || r.status === status);
+    const key = (r: typeof list[number]) => sort === "battery" ? r.battery : sort === "tasks" ? -r.stats.tasks_completed : sort === "distance" ? -r.stats.distance_m : sort === "status" ? r.status : r.id;
+    return list.sort((a, b) => { const ka = key(a), kb = key(b); return ka < kb ? -1 : ka > kb ? 1 : a.id.localeCompare(b.id); });
+  }, [robots, status, sort]);
+  const counts = useMemo(() => Object.values(robots).reduce<Record<string, number>>((m, r) => { m[r.status] = (m[r.status] ?? 0) + 1; return m; }, {}), [robots]);
+  const Th = ({ k, children }: { k: typeof sort; children: React.ReactNode }) => <th onClick={() => setSort(k)} style={{ cursor: "pointer", color: sort === k ? "var(--accent)" : undefined }}>{children}{sort === k ? " ↓" : ""}</th>;
+  return (
+    <>
+      <Head title={`Robot Fleet · ${Object.keys(robots).length} AMRs`}><span className="hint" style={{ margin: 0 }}>click a row to select &amp; focus the camera</span></Head>
+      <div className="modal-b">
+        <div className="filters">
+          {["", "ACTIVE", "IDLE", "CHARGING", "WARNING", "ERROR", "OFFLINE"].map((st) => (
+            <button key={st} className={"chip" + (status === st ? " on" : "")} onClick={() => setStatus(st)} style={st ? { color: STATUS_COLOR[st as keyof typeof STATUS_COLOR] } : undefined}>{st || "All"}{st ? ` ${counts[st] ?? 0}` : ` ${Object.keys(robots).length}`}</button>
+          ))}
+        </div>
+        <table className="dt full">
+          <thead><tr><Th k="id">Robot</Th><Th k="status">Status</Th><th>State</th><Th k="battery">Battery</Th><th>Task</th><th>Zone</th><th>Speed</th><th>Perception</th><Th k="tasks">Done</Th><Th k="distance">Distance</Th></tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const t = r.current_task_id ? tasks[r.current_task_id] : null;
+              const col = STATUS_COLOR[r.status];
+              return (
+                <tr key={r.id} onClick={() => { select(r.id); setModal(null); }} style={{ cursor: "pointer" }}>
+                  <td style={{ fontWeight: 700 }}>{r.id}</td>
+                  <td style={{ color: col }}><Dot color={col} />{r.status[0] + r.status.slice(1).toLowerCase()}</td>
+                  <td>{r.fsm}</td>
+                  <td style={{ color: r.battery < 10 ? "#ef4444" : r.battery < 20 ? "#f97316" : undefined }}>{r.battery.toFixed(0)}%</td>
+                  <td>{t ? `#${t.id} ${t.type[0] + t.type.slice(1).toLowerCase()}` : "—"}</td>
+                  <td>{r.zone ? `Zone ${r.zone}` : "—"}</td>
+                  <td>{r.velocity > 0.05 ? `${r.velocity.toFixed(2)} m/s` : "—"}</td>
+                  <td style={{ color: r.perception?.state === "STOPPED" ? "#ef4444" : r.perception?.state === "SLOWING" ? "#f59e0b" : undefined }}>{percText(r)}</td>
+                  <td>{r.stats.tasks_completed}</td>
+                  <td>{r.stats.distance_m >= 1000 ? `${(r.stats.distance_m / 1000).toFixed(2)} km` : `${r.stats.distance_m.toFixed(0)} m`}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

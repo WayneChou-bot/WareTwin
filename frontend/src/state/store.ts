@@ -44,8 +44,8 @@ interface Store {
   heat: { traffic?: HeatmapLayer; congestion?: HeatmapLayer } | null;
   setHeat: (l: HeatmapLayer | null) => void;
   /** Phase 4 UI：Modal / 抽屜 */
-  modal: null | "audit" | "tasks" | "robot";
-  setModal: (m: null | "audit" | "tasks" | "robot") => void;
+  modal: null | "audit" | "tasks" | "robot" | "fleet";
+  setModal: (m: null | "audit" | "tasks" | "robot" | "fleet") => void;
   drawer: null | "scenarios" | "ops" | "whatif";
   setDrawer: (d: null | "scenarios" | "ops" | "whatif") => void;
   /** 最近一次 What-if 結果（後端回傳，含 schema 外的 window 對照資料） */

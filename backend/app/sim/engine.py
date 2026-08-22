@@ -22,6 +22,8 @@ SIM = dict(
     BATTERY_MOVE=0.010, BATTERY_LOAD=0.004, BATTERY_IDLE=0.0008, CHARGE_RATE=0.06,
     TASK_INTERVAL_TICKS=70, MAX_WAITING_TASKS=12, WAIT_REPLAN_TICKS=25, WAIT_BACKOFF_TICKS=80, STATION_ARRIVE_CELLS=3, ON_TIME_LIMIT_TICKS=2400,
     IDLE_TO_PARK_TICKS=300, KPI_EVERY=10, SERIES_EVERY=600, EVENT_RING=500, ZONE_CAPACITY=6,
+    # Phase 7：虛擬 LiDAR 與局部避障（與 TS 引擎相同）
+    LIDAR_RANGE=4.0, LIDAR_FOV=math.pi * 1.5, PERC_STOP=1.7, PERC_SLOW=2.8, PERC_LOOKAHEAD=3, PERC_EVENT_TICKS=200,
 )
 
 MASK = 0xFFFFFFFF
@@ -64,13 +66,15 @@ def _sign(x: float) -> float:
 
 
 class RobotRt:
-    __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point")
+    __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point",
+                 "front_id", "front_dist", "last_perc_event")
 
     def __init__(self) -> None:
         self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
         self.dwell = 0; self.wait_ticks = 0; self.target: Optional[tuple[int, int]] = None
         self.goal_loc: Optional[str] = None; self.phase: Optional[str] = None
         self.charger_id: Optional[str] = None; self.idle_ticks = 0; self.last_battery_alert = "NONE"
+        self.front_id: Optional[str] = None; self.front_dist = math.inf; self.last_perc_event = -10**9
 
 
 class SimEngine:
@@ -92,6 +96,8 @@ class SimEngine:
         self.task_times: list[int] = []
         self.on_time = 0; self.completed_count = 0; self.last_series_tick = 0
         self.state: dict[str, Any] = (__import__("copy").deepcopy(initial_state) if initial_state else self._build_initial_state(seed))
+        for r in self.state["robots"].values():   # 舊版快照相容
+            r.setdefault("perception", {"state": "CLEAR", "ahead_m": SIM["LIDAR_RANGE"], "nearest_m": None, "obstacles": []})
         for rid in self.state["robots"]:
             self.rt[rid] = RobotRt()
         self.next_task_tick = self.state["sim"]["tick"] + 10
@@ -111,6 +117,7 @@ class SimEngine:
                 "health": 95 + math.floor(self.rng() * 5), "current_task_id": None, "destination": None, "path": [], "path_index": 0,
                 "load": {"current": 0, "capacity": 4}, "zone": None, "eta_s": None, "fsm_since_tick": 0,
                 "stats": {"distance_m": 0, "tasks_completed": 0, "energy_wh": 0, "busy_ticks": 0, "wait_ticks": 0},
+                "perception": {"state": "CLEAR", "ahead_m": SIM["LIDAR_RANGE"], "nearest_m": None, "obstacles": []},
             }
         n = len(robots)
         return {
@@ -216,6 +223,8 @@ class SimEngine:
         self._generate_tasks()
         self._assign_tasks()
         self._rebuild_occupancy()
+        for rid in list(S["robots"].keys()):
+            self._update_perception(S["robots"][rid], self.rt[rid])
         for rid in list(S["robots"].keys()):
             self._step_robot(S["robots"][rid], self.rt[rid])
         self._update_zones()
@@ -484,7 +493,18 @@ class SimEngine:
             a = self.occupancy.get((ncell[0], my_cell[1])); b = self.occupancy.get((my_cell[0], ncell[1]))
             if a and a != r["id"]: occ = a
             elif b and b != r["id"]: occ = b
-        if entering and occ and occ != r["id"]:
+        # 感知層：接下來路徑上 < PERC_STOP 有動態障礙也視為被擋（比格子預約早一格停，車身不再貼在一起）
+        blocked_by = occ if (entering and occ and occ != r["id"]) else None
+        perc_stop = rt.front_id is not None and rt.front_dist < SIM["PERC_STOP"]
+        if not blocked_by and perc_stop:
+            blocked_by = rt.front_id
+        if blocked_by:
+            occ = blocked_by
+            if perc_stop and r["perception"]["state"] != "STOPPED":
+                r["perception"]["state"] = "STOPPED"
+                if self.state["sim"]["tick"] - rt.last_perc_event > SIM["PERC_EVENT_TICKS"] and rt.front_id and rt.front_id in self.state["robots"]:
+                    rt.last_perc_event = self.state["sim"]["tick"]
+                    self.emit("OBSTACLE_DETECTED", "ROBOT", "LOW", f"{r['id']} LiDAR: {rt.front_id} ahead {rt.front_dist:.1f} m — holding", robot_id=r["id"])
             remaining0 = len(r["path"]) - r["path_index"]
             # 工作站前排隊：距目標 ≤ N 格就視為到達、就地作業
             if not rt.backing_off and remaining0 <= SIM["STATION_ARRIVE_CELLS"] and rt.phase in ("TO_SOURCE", "TO_DEST"):
@@ -492,7 +512,7 @@ class SimEngine:
             r["velocity"] = max(0, r["velocity"] - SIM["ACCEL"] * SIM["TICK_S"] * 2)
             rt.wait_ticks += 1; r["stats"]["wait_ticks"] += 1
             other = self.state["robots"].get(occ)
-            mutual = bool(other) and other["path_index"] < len(other["path"]) and tuple(other["path"][other["path_index"]]) == my_cell
+            mutual = bool(other) and ((other["path_index"] < len(other["path"]) and tuple(other["path"][other["path_index"]]) == my_cell) or self.rt[other["id"]].front_id == r["id"])
             if mutual and rt.wait_ticks > 10 and self._yields_to(r, other):
                 self._back_off(r, rt); return
             if rt.wait_ticks == SIM["WAIT_REPLAN_TICKS"]:
@@ -514,7 +534,10 @@ class SimEngine:
         turning = abs(dh) > 0.3
         remaining = len(r["path"]) - r["path_index"]
         walk = self.grid.cells[ncell[1] * self.grid.cols + ncell[0]] == 2
-        vmax = r["max_speed"] * (SIM["TURN_SLOW"] if turning else 1) * (0.5 if remaining <= 1 else 1) * (0.6 if walk else 1) * (self._zone_speed_factor(ncell) if self.congested_zones else 1)
+        slowing = rt.front_id is not None and rt.front_dist < SIM["PERC_SLOW"]
+        if slowing:
+            r["perception"]["state"] = "SLOWING"
+        vmax = r["max_speed"] * (SIM["TURN_SLOW"] if turning else 1) * (0.5 if remaining <= 1 else 1) * (0.6 if walk else 1) * (self._zone_speed_factor(ncell) if self.congested_zones else 1) * (0.45 if slowing else 1)
         r["velocity"] = min(vmax, r["velocity"] + SIM["ACCEL"] * SIM["TICK_S"])
         r["heading"] += _sign(dh) * min(abs(dh), 4.0 * SIM["TICK_S"])
         step_len = min(dist, r["velocity"] * SIM["TICK_S"])
@@ -579,6 +602,74 @@ class SimEngine:
 
     def _update_eta(self, r: dict[str, Any]) -> None:
         r["eta_s"] = jsround(self._remaining_path_length(r) / (r["max_speed"] * 0.8)) if r["path"] else None
+
+    # ─────────────────────────────────────────────────────────
+    # Phase 7：虛擬 LiDAR 感知（270° / 4 m），邏輯與 TS 引擎相同
+    # ─────────────────────────────────────────────────────────
+    def _line_of_sight(self, x0: float, z0: float, x1: float, z1: float) -> bool:
+        d = math.hypot(x1 - x0, z1 - z0); n = max(1, math.ceil(d / 0.5))
+        for i in range(1, n):
+            t = i / n
+            c = to_cell(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t)
+            if not is_walkable(self.grid, c[0], c[1]):
+                return False
+        return True
+
+    def _update_perception(self, r: dict[str, Any], rt: RobotRt) -> None:
+        P = r["perception"]
+        if r["fsm"] == "OFFLINE":
+            P["state"] = "OFF"; P["obstacles"] = []; P["nearest_m"] = None; P["ahead_m"] = 0
+            rt.front_id = None; rt.front_dist = math.inf; return
+        x, z = r["position"][0], r["position"][2]; h = r["heading"]; cos_h = math.cos(h); sin_h = math.sin(h)
+        obs: list[dict[str, Any]] = []
+
+        def consider(kind: str, oid: str, ox: float, oz: float) -> None:
+            dx = ox - x; dz = oz - z; dist = math.hypot(dx, dz)
+            if dist > SIM["LIDAR_RANGE"] or dist < 1e-6:
+                return
+            b = math.atan2(dz, dx) - h
+            while b > math.pi: b -= 2 * math.pi
+            while b < -math.pi: b += 2 * math.pi
+            if abs(b) > SIM["LIDAR_FOV"] / 2:
+                return
+            if not self._line_of_sight(x, z, ox, oz):
+                return
+            obs.append({"kind": kind, "id": oid, "distance_m": jsround(dist * 10) / 10, "bearing_deg": jsround(-b * 180 / math.pi)})
+
+        for oid, o in self.state["robots"].items():
+            if oid != r["id"]:
+                consider("ROBOT", oid, o["position"][0], o["position"][2])
+        for pid, p in self.state["people"].items():
+            consider("HUMAN", pid, p["position"][0], p["position"][2])
+        ahead = SIM["LIDAR_RANGE"]
+        d = 0.5
+        while d <= SIM["LIDAR_RANGE"] + 1e-9:
+            c = to_cell(x + cos_h * d, z + sin_h * d)
+            if not is_walkable(self.grid, c[0], c[1]):
+                ahead = d; break
+            d += 0.25
+        if ahead < SIM["LIDAR_RANGE"]:
+            obs.append({"kind": "RACK", "id": None, "distance_m": jsround(ahead * 10) / 10, "bearing_deg": 0})
+        obs.sort(key=lambda o: (o["distance_m"], o["id"] or ""))
+        front_id: Optional[str] = None; front_dist = math.inf
+        if r["path_index"] < len(r["path"]):
+            on_path: set[tuple[int, int]] = set(); prev = to_cell(x, z)
+            for i in range(r["path_index"], min(len(r["path"]), r["path_index"] + SIM["PERC_LOOKAHEAD"])):
+                c = (r["path"][i][0], r["path"][i][1]); on_path.add(c)
+                if c[0] != prev[0] and c[1] != prev[1]:
+                    on_path.add((c[0], prev[1])); on_path.add((prev[0], c[1]))
+                prev = c
+            for o in obs:
+                if o["kind"] == "RACK" or o["id"] is None:
+                    continue
+                pos = self.state["robots"][o["id"]]["position"] if o["kind"] == "ROBOT" else self.state["people"][o["id"]]["position"]
+                if to_cell(pos[0], pos[2]) in on_path and o["distance_m"] < front_dist:
+                    front_dist = o["distance_m"]; front_id = o["id"]
+        rt.front_id = front_id; rt.front_dist = front_dist
+        P["obstacles"] = obs[:5]
+        P["nearest_m"] = obs[0]["distance_m"] if obs else None
+        P["ahead_m"] = jsround(min(ahead, front_dist if front_id else ahead) * 10) / 10
+        P["state"] = "CLEAR"
 
     def _rebuild_occupancy(self) -> None:
         self.occupancy.clear()

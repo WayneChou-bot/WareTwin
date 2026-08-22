@@ -196,6 +196,22 @@ class RobotStats(_Base):
     wait_ticks: int = 0
 
 
+class PerceivedObstacle(_Base):
+    """虛擬 LiDAR 偵測到的障礙（相對機器人）"""
+    kind: Literal["ROBOT", "HUMAN", "RACK"]
+    id: Optional[str] = None
+    distance_m: float = Field(ge=0)
+    bearing_deg: float          # 相對航向，左正右負
+
+
+class Perception(_Base):
+    """Phase 7：機器人感知（270° / 4 m 虛擬 LiDAR）與局部避障狀態"""
+    state: Literal["CLEAR", "SLOWING", "STOPPED", "OFF"] = "OFF"
+    ahead_m: float = 4.0        # 正前方淨空距離（含貨架）
+    nearest_m: Optional[float] = None
+    obstacles: list[PerceivedObstacle] = Field(default_factory=list)
+
+
 class RobotState(_Base):
     id: RobotId
     model: str = "AMR-L"
@@ -216,6 +232,7 @@ class RobotState(_Base):
     eta_s: Optional[float] = None
     fsm_since_tick: int = 0
     stats: RobotStats = Field(default_factory=RobotStats)
+    perception: Perception = Field(default_factory=Perception)
 
 
 # ─────────────────────────────────────────────────────────────

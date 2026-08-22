@@ -125,6 +125,21 @@ export type EventType =
 // Robot
 // ─────────────────────────────────────────────────────────────
 
+export interface PerceivedObstacle {
+  kind: "ROBOT" | "HUMAN" | "RACK";
+  id: string | null;
+  distance_m: number;
+  /** 相對航向角 (度)，左正右負 */
+  bearing_deg: number;
+}
+export interface Perception {
+  state: "CLEAR" | "SLOWING" | "STOPPED" | "OFF";
+  /** 正前方淨空距離 (m)，含貨架 */
+  ahead_m: number;
+  nearest_m: number | null;
+  obstacles: PerceivedObstacle[];
+}
+
 export interface RobotState {
   id: RobotId;
   model: string;                 // "AMR-L" 等，對應 GLB 模型名
@@ -156,6 +171,8 @@ export interface RobotState {
     busy_ticks: number;
     wait_ticks: number;
   };
+  /** Phase 7：虛擬 LiDAR（270° / 4 m）感知與局部避障狀態 */
+  perception: Perception;
 }
 
 // ─────────────────────────────────────────────────────────────
