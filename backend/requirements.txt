@@ -1,8 +1,7 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.7
-websockets>=12
-pytest>=8
-httpx>=0.27
-openai>=1.40
-python-dotenv>=1.0
+# Runtime（Render / Docker 用；版本鎖定 minor，確保 build 可重現）
+fastapi>=0.115,<0.142
+uvicorn[standard]>=0.30,<0.47
+pydantic>=2.7,<3
+websockets>=12,<18
+openai>=1.40,<4
+python-dotenv>=1.0,<2

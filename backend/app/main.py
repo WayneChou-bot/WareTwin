@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 import uuid
@@ -19,6 +20,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter, ValidationError
 
 try:
@@ -34,6 +36,7 @@ from .sim.engine import SimEngine, SIM
 from .sim.whatif import run_whatif
 from .sim.navgrid import load_layout
 
+log = logging.getLogger("twin")
 TICK_S = SIM["TICK_S"]
 HEATMAP_EVERY = 30
 KPI_DB_EVERY = 600
@@ -59,6 +62,11 @@ class TwinServer:
         self._prev_decision = ""
         self._task: asyncio.Task[None] | None = None
         self.tick_rate_actual = 0.0
+        self.last_sent_tick = 0          # 上一次 broadcast 的 tick（PATCH 的 base_tick 用；一輪可能推進多個 tick）
+        self.last_progress = time.monotonic()   # 模擬迴圈最後一次成功推進的時間（health 用）
+        self.loop_errors = 0
+        self.last_error: str | None = None
+        self._whatif_lock = asyncio.Lock()
 
     # ── 模擬迴圈 ────────────────────────────────────────────
     async def run(self) -> None:
@@ -73,13 +81,22 @@ class TwinServer:
                 continue
             acc += dt * self.speed
             n = 0
-            while acc >= TICK_S and n < 40:
-                self.engine.step(); acc -= TICK_S; n += 1
-            if n:
-                rate_n += n
-                if now - rate_t >= 1:
-                    self.tick_rate_actual = rate_n / (now - rate_t); rate_n, rate_t = 0, now
-                await self.after_ticks()
+            try:
+                while acc >= TICK_S and n < 40:
+                    self.engine.step(); acc -= TICK_S; n += 1
+                if n:
+                    rate_n += n
+                    if now - rate_t >= 1:
+                        self.tick_rate_actual = rate_n / (now - rate_t); rate_n, rate_t = 0, now
+                    await self.after_ticks()
+                    self.last_progress = time.monotonic()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # 單一輪失敗（例如 SQLite 暫時寫不進去）不能讓整個模擬死掉
+                self.loop_errors += 1; self.last_error = f"{type(e).__name__}: {e}"[:300]
+                log.exception("simulation loop error (%d): %s", self.loop_errors, self.last_error)
+                acc = 0.0
+                await asyncio.sleep(0.5)
 
     async def after_ticks(self) -> None:
         eng = self.engine
@@ -87,18 +104,24 @@ class TwinServer:
         S["sim"]["speed"] = self.speed
         S["sim"]["mode"] = "PAUSED" if self.paused else "LIVE"
         events = eng.new_events; eng.new_events = []
-        if events:
-            self.db.insert_events(self.run_id, events)
-        if S["recent_decisions"] and S["recent_decisions"][0]["id"] != self._prev_decision:
-            self._prev_decision = S["recent_decisions"][0]["id"]
-            self.db.insert_decisions(self.run_id, S["recent_decisions"][:5])
         tick = S["sim"]["tick"]
-        if tick % KPI_DB_EVERY == 0:
-            self.db.insert_kpi(self.run_id, tick, S["kpi"])
+        try:
+            if events:
+                self.db.insert_events(self.run_id, events)
+            if S["recent_decisions"] and S["recent_decisions"][0]["id"] != self._prev_decision:
+                self._prev_decision = S["recent_decisions"][0]["id"]
+                self.db.insert_decisions(self.run_id, S["recent_decisions"][:5])
+            if tick % KPI_DB_EVERY == 0:
+                self.db.insert_kpi(self.run_id, tick, S["kpi"])
+        except Exception as e:  # DB 只是審計用途，失敗不應該影響即時串流
+            self.loop_errors += 1; self.last_error = f"db: {type(e).__name__}: {e}"[:300]
+            log.warning("db write failed: %s", self.last_error)
         if not self.clients:
-            self._snapshot_prev(); return
+            self._snapshot_prev(); self.last_sent_tick = tick; return
         patch = self.make_patch()
-        msg = {"type": "PATCH", "base_tick": tick - 1, "tick": tick, "patch": patch, "events": events}
+        # base_tick = 上一次真正送出的 tick；一輪推進多個 tick（10× 或主機卡頓）時前端才不會誤判漏包而 RESYNC
+        msg = {"type": "PATCH", "base_tick": self.last_sent_tick, "tick": tick, "patch": patch, "events": events}
+        self.last_sent_tick = tick
         await self.broadcast(msg)
         if tick % HEATMAP_EVERY == 0:
             await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("CONGESTION", eng.traffic)})
@@ -236,9 +259,16 @@ class TwinServer:
             await ws.send_text(json.dumps({"type": "COPILOT_REPLY", "request_id": msg.request_id, "text": reply["text"], "citations": cites, "model": reply.get("model")}, ensure_ascii=False))
         elif t == "WHATIF_RUN":
             req = msg.request.model_dump(exclude_none=True)
-            result = await asyncio.to_thread(run_whatif, eng, req)
+            result = await self.run_whatif_safe(req)
             eng.emit("AI_DECISION", "AI_AGENT", "INFO", f"What-if '{req.get('scenario_name', 'scenario')}' simulated {req.get('duration_ticks', 600) // 10}s: throughput {result['delta'].get('throughput_per_min', 0):+} tasks/min", payload={"compute_ms": result["compute_ms"]})
             await ws.send_text(json.dumps({"type": "WHATIF_RESULT", "result": result}, ensure_ascii=False))
+
+    async def run_whatif_safe(self, req: dict[str, Any]) -> dict[str, Any]:
+        """在主 event loop 上先 clone（此時沒有 tick 在進行），再把獨立的 clone 交給 worker thread 跑；同時只允許一個 What-if。"""
+        async with self._whatif_lock:
+            start_tick = self.engine.state["sim"]["tick"]
+            base, scen = self.engine.clone(), self.engine.clone()
+            return await asyncio.to_thread(run_whatif, base, scen, req, start_tick)
 
     def reset(self, seed: int | None = None) -> None:
         if seed is not None:
@@ -246,6 +276,7 @@ class TwinServer:
         self.engine = SimEngine(self.layout, seed=self.seed)
         self.run_id = uuid.uuid4().hex[:8]
         self._prev = {}; self._prev_subsys = ""; self._prev_decision = ""; self._sent_decision = ""
+        self.last_sent_tick = 0
         self._snapshot_prev()
 
 
@@ -296,20 +327,40 @@ def root() -> dict[str, Any]:
     return {"service": "warehouse-digital-twin-backend", "ws": "/ws", "health": "/api/health", "docs": "/docs"}
 
 
-@app.get("/api/health")
-def health() -> dict[str, Any]:
+STALL_S = float(os.environ.get("TWIN_HEALTH_STALL_S", "10"))
+
+
+def health_payload() -> dict[str, Any]:
     S = server.engine.state
-    return {"ok": True, "run_id": server.run_id, "tick": S["sim"]["tick"], "speed": server.speed, "paused": server.paused,
-            "clients": len(server.clients), "tick_rate": round(server.tick_rate_actual, 1), "robots": len(S["robots"])}
+    task_alive = server._task is not None and not server._task.done()
+    stalled = (not server.paused and server.speed > 0) and (time.monotonic() - server.last_progress > STALL_S)
+    db_ok = True
+    try:
+        server.db.ping()
+    except Exception:
+        db_ok = False
+    ok = task_alive and not stalled
+    return {"ok": ok, "run_id": server.run_id, "tick": S["sim"]["tick"], "speed": server.speed, "paused": server.paused,
+            "clients": len(server.clients), "tick_rate": round(server.tick_rate_actual, 1), "robots": len(S["robots"]),
+            "sim_task_alive": task_alive, "stalled": stalled, "db_ok": db_ok, "loop_errors": server.loop_errors, "last_error": server.last_error}
+
+
+@app.get("/api/health")
+async def health() -> Any:
+    """模擬迴圈死掉或超過 STALL_S 沒推進 → 503，讓 Render 重啟；DB 掛掉只回報不判定失敗（審計用途）。"""
+    h = health_payload()
+    if not h["ok"]:
+        return JSONResponse(h, status_code=503)
+    return h
 
 
 @app.get("/api/state")
-def get_state() -> dict[str, Any]:
+async def get_state() -> dict[str, Any]:
     return server.full_message()["state"]
 
 
 @app.get("/api/state/validate")
-def validate_state() -> dict[str, Any]:
+async def validate_state() -> dict[str, Any]:
     """用 Pydantic 驗證目前 state 是否符合契約（除錯用）。"""
     TwinState.model_validate(server.engine.state)
     return {"valid": True}
@@ -321,7 +372,7 @@ def get_layout() -> dict[str, Any]:
 
 
 @app.get("/api/kpi")
-def get_kpi() -> dict[str, Any]:
+async def get_kpi() -> dict[str, Any]:
     return server.engine.state["kpi"]
 
 
@@ -337,7 +388,7 @@ def get_decisions(limit: int = 20) -> list[dict[str, Any]]:
 
 
 @app.post("/api/inject")
-def post_inject(body: dict[str, Any]) -> dict[str, Any]:
+async def post_inject(body: dict[str, Any]) -> dict[str, Any]:
     try:
         inj = inject_adapter.validate_python(body)
     except ValidationError as e:
@@ -347,13 +398,13 @@ def post_inject(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/inject/clear")
-def post_clear(body: dict[str, Any]) -> dict[str, Any]:
+async def post_clear(body: dict[str, Any]) -> dict[str, Any]:
     server.engine.clear_injection(str(body.get("kind")), str(body.get("target_id")))
     return {"ok": True}
 
 
 @app.post("/api/tasks")
-def post_task(body: NewTask) -> dict[str, Any]:
+async def post_task(body: NewTask) -> dict[str, Any]:
     return server.engine.create_task(body.type, body.priority, body.source, body.destination, body.load_units)
 
 
@@ -394,7 +445,7 @@ async def post_whatif(body: dict[str, Any]) -> dict[str, Any]:
         req = WhatIfRequest.model_validate(body).model_dump(exclude_none=True)
     except ValidationError as e:
         raise HTTPException(400, str(e)[:300])
-    return await asyncio.to_thread(run_whatif, server.engine, req)
+    return await server.run_whatif_safe(req)
 
 
 @app.get("/api/ai/status")
@@ -404,10 +455,10 @@ def ai_status() -> dict[str, Any]:
 
 
 @app.post("/api/sim")
-def post_sim(body: dict[str, Any]) -> dict[str, Any]:
+async def post_sim(body: dict[str, Any]) -> dict[str, Any]:
     action = body.get("action"); speed = body.get("speed")
     if action == "PAUSE": server.paused = True
     elif action == "PLAY": server.paused = False
     elif action == "RESET": server.reset(body.get("seed"))
     if speed in (0, 1, 2, 5, 10): server.speed = speed
-    return health()
+    return health_payload()

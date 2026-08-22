@@ -7,7 +7,7 @@
 import { useEffect } from "react";
 import { SimEngine, SIM } from "./engine";
 import { layout, useStore } from "../state/store";
-import { wsConnect, wsSend } from "../services/ws";
+import { wsConnect, wsDisconnect, wsSend } from "../services/ws";
 import type { ScenarioInjection, TaskPriority, TaskType } from "../schema/twin_state";
 
 let engine: SimEngine | null = null;
@@ -90,6 +90,7 @@ export function useSimulationRunner() {
         if (s.source !== "online") s.setSource("connecting");
       }
     });
-    return () => cancelAnimationFrame(raf);
+    // StrictMode（mount → cleanup → mount）或正常 unmount 時要把 WebSocket 與 listener 一起收掉，否則會留下重複連線
+    return () => { cancelAnimationFrame(raf); wsDisconnect(); };
   }, []);
 }

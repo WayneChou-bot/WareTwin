@@ -52,7 +52,7 @@ git clone https://github.com/WayneChou-bot/WareTwin.git && cd WareTwin
 # 後端
 cd backend
 conda create -n waretwin python=3.11 -y && conda activate waretwin
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime + pytest/httpx
 uvicorn app.main:app --reload --port 8000
 
 # 前端（另一個終端）
@@ -97,8 +97,8 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 17 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
-cd frontend && npm test                 # 8 個：TypeScript 引擎的相同契約
+cd backend && python -m pytest -q      # 22 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
+cd frontend && npm test                 # 9 個：TypeScript 引擎的相同契約
 ```
 
 ## ☁️ 部署

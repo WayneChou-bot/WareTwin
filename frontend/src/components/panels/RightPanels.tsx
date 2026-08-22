@@ -80,11 +80,12 @@ export function LiveCameraPanel() {
   const obs = camStatus[cam.id]?.last_observation ?? null;
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);   // setInterval 的 closure 會抓到舊的 busy state，用 ref 才能擋住重疊請求
   const [auto, setAuto] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const analyze = async () => {
-    if (busy || offline) return;
-    setBusy(true); setErr(null);
+    if (busyRef.current || offline) return;
+    busyRef.current = true; setBusy(true); setErr(null);
     try {
       // 擷取 Live Camera 畫布（需 preserveDrawingBuffer）縮成 512px JPEG 送 VLM
       let image_b64: string | undefined;
@@ -97,7 +98,7 @@ export function LiveCameraPanel() {
       const r = await fetch(`${API_URL}/api/vlm/observe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ camera_id: cam.id, image_b64 }) });
       if (!r.ok) throw new Error(await r.text());
     } catch (e) { setErr((e as Error).message.slice(0, 80)); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   useEffect(() => { if (!auto) return; const t = setInterval(analyze, 5000); return () => clearInterval(t); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, cam.id, source]);

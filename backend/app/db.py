@@ -24,6 +24,9 @@ class TwinDB:
             """
         )
 
+    def ping(self) -> None:
+        self.conn.execute("SELECT 1").fetchone()
+
     def insert_events(self, run_id: str, events: Iterable[dict[str, Any]]) -> None:
         rows = [(run_id, e["id"], e["tick"], e["type"], e["source"], e["severity"], e["message"], e.get("robot_id"), e.get("task_id"),
                  e.get("zone_id"), e.get("conveyor_id"), e.get("camera_id"), json.dumps(e.get("payload")) if e.get("payload") else None) for e in events]

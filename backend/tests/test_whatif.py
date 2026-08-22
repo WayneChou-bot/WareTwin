@@ -24,7 +24,7 @@ def test_clone_is_deterministic_and_independent():
 def test_whatif_compound_scenario_hurts_task_time():
     e = SimEngine(L, seed=42)
     for _ in range(3000): e.step()
-    r = run_whatif(e, {"injections": [{"kind": "CONVEYOR_FAILURE", "conveyor_id": "CV03"}, {"kind": "HUMAN_INTRUSION", "zone_id": "B", "duration_ticks": 900}, {"kind": "TASK_BURST", "count": 20, "priority": "HIGH"}], "duration_ticks": 3000})
+    r = run_whatif(e.clone(), e.clone(), {"injections": [{"kind": "CONVEYOR_FAILURE", "conveyor_id": "CV03"}, {"kind": "HUMAN_INTRUSION", "zone_id": "B", "duration_ticks": 900}, {"kind": "TASK_BURST", "count": 20, "priority": "HIGH"}], "duration_ticks": 3000}, e.state["sim"]["tick"])
     b, s = r["window"]["baseline"], r["window"]["scenario"]
     assert e.state["sim"]["tick"] == 3000
     assert s["avg_task_time_s"] > b["avg_task_time_s"] * 1.15

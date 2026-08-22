@@ -155,7 +155,7 @@ def rule_based_answer(question: str, S: dict[str, Any]) -> dict[str, Any]:
         cs = causes()
         if cs: lines.append("Contributing: " + "; ".join(cs) + ".")
     elif "what happens if" in q or "what if" in q:
-        lines.append("What-if simulation (clone twin → inject → run 60 s → compare KPI) arrives in Phase 6. For now: " + ("; ".join(causes()) or "no active faults to extrapolate from."))
+        lines.append("Use the What-if drawer (TopBar → What-if): it clones the live twin, injects the scenario and compares 12 KPIs against a same-seed baseline without touching LIVE. Current situation: " + ("; ".join(causes()) or "no active faults, so the baseline is nominal operation."))
     else:
         lines.append(f"Status at {snap['sim_time']}: {snap['fleet']['counts']['active']} active, {snap['fleet']['counts']['charging']} charging, {snap['fleet']['counts']['idle']} idle; {k['completed_today']} tasks done, {k['pending']} pending; throughput {k['throughput_per_min']}/min.")
         cs = causes()

@@ -53,7 +53,7 @@ git clone https://github.com/WayneChou-bot/WareTwin.git && cd WareTwin
 # backend
 cd backend
 conda create -n waretwin python=3.11 -y && conda activate waretwin   # or: python -m venv .venv
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime + pytest/httpx
 uvicorn app.main:app --reload --port 8000
 
 # frontend (new terminal)
@@ -98,9 +98,9 @@ WareTwin/
 ## 🧪 Tests
 
 ```bash
-cd backend && python -m pytest -q      # 17 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
+cd backend && python -m pytest -q      # 22 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
-cd frontend && npm test                 # 8 tests: same engine contract in TypeScript
+cd frontend && npm test                 # 9 tests: same engine contract in TypeScript
 ```
 
 ## ☁️ Deployment

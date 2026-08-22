@@ -39,13 +39,21 @@ export function wsSend(msg: ClientMessage): boolean {
   return false;
 }
 
+// 分頁從背景回到前景：累積的 PATCH 可能被瀏覽器節流，直接要一份 FULL 最省事（具名 listener 才能在 disconnect 時移除）
+const onVisible = () => { if (document.visibilityState === "visible") { localTick = -1; wsSend({ type: "RESYNC" }); } };
+
 export function wsConnect(onChange: (s: ConnState) => void) {
+  wsDisconnect();                       // 重複呼叫（StrictMode 雙掛載）時先把前一條連線收掉
   stopped = false; onStateChange = onChange;
   open();
-  // 分頁從背景回到前景：累積的 PATCH 可能被瀏覽器節流，直接要一份 FULL 最省事
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { localTick = -1; wsSend({ type: "RESYNC" }); } });
+  document.addEventListener("visibilitychange", onVisible);
 }
-export function wsDisconnect() { stopped = true; clearTimeout(reconnectTimer); socket?.close(); socket = null; }
+export function wsDisconnect() {
+  stopped = true; clearTimeout(reconnectTimer);
+  document.removeEventListener("visibilitychange", onVisible);
+  if (socket) { const s = socket; socket = null; s.onclose = null; s.onmessage = null; s.close(); }
+  onStateChange = null; localTick = -1;
+}
 
 function open() {
   if (stopped) return;

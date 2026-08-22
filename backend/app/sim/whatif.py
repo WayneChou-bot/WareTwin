@@ -33,7 +33,7 @@ METRICS = [
 ]
 
 
-def _window_kpi(eng: SimEngine, start_tick: int, start_completed: int, start_wait: float, start_energy: float, duration: int) -> dict[str, Any]:
+def _window_kpi(eng: SimEngine, start_tick: int, start_completed: int, start_wait: float, start_energy: float, duration: int, counts: dict[str, int]) -> dict[str, Any]:
     S = eng.state; K = S["kpi"]; robots = list(S["robots"].values())
     completed = eng.completed_count - start_completed
     minutes = max(1e-9, duration / 600)
@@ -42,7 +42,6 @@ def _window_kpi(eng: SimEngine, start_tick: int, start_completed: int, start_wai
     on_time = (sum(1 for t in done if t["deadline_tick"] is None or t["completed_tick"] <= t["deadline_tick"]) / len(done)) if done else 1.0
     wait_total = sum(r["stats"]["wait_ticks"] for r in robots)
     energy = sum(r["stats"]["energy_wh"] for r in robots)
-    ev = S["recent_events"]
     return {
         "completed": completed,
         "throughput_per_min": round(completed / minutes, 2),
@@ -51,8 +50,8 @@ def _window_kpi(eng: SimEngine, start_tick: int, start_completed: int, start_wai
         "avg_wait_s": round((wait_total - start_wait) / len(robots) / 10, 1),
         "utilization": round(K["operation"]["avg_utilization"], 3),
         "congestion_index": K["efficiency"]["congestion_index"],
-        "replans": sum(1 for e in ev if e["type"] == "ROUTE_REPLANNED" and e["tick"] > start_tick),
-        "transfers": sum(1 for e in ev if e["type"] == "TASK_TRANSFERRED" and e["tick"] > start_tick),
+        "replans": counts.get("ROUTE_REPLANNED", 0),     # 從整段 run 的事件流計數，不受 500 筆 ring 限制
+        "transfers": counts.get("TASK_TRANSFERRED", 0),
         "energy_kwh": round((energy - start_energy) / 1000, 3),
         "robots_offline": sum(1 for r in robots if r["status"] in ("OFFLINE", "ERROR")),
         "pending_end": K["operation"]["pending"],
@@ -68,24 +67,28 @@ def _run(eng: SimEngine, injections: list[dict[str, Any]], duration: int) -> tup
     for inj in injections:
         eng.inject(inj)
     events: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
     for _ in range(duration):
         eng.step()
         if eng.new_events:
-            events.extend(e for e in eng.new_events if e["severity"] in ("MEDIUM", "HIGH", "CRITICAL"))
+            for e in eng.new_events:
+                counts[e["type"]] = counts.get(e["type"], 0) + 1
+                if e["severity"] in ("MEDIUM", "HIGH", "CRITICAL"):
+                    events.append(e)
             eng.new_events = []
     eng._update_kpi()
-    return _window_kpi(eng, start_tick, start_completed, start_wait, start_energy, duration), events, eng.state["kpi"]
+    return _window_kpi(eng, start_tick, start_completed, start_wait, start_energy, duration, counts), events, eng.state["kpi"]
 
 
-def run_whatif(live: SimEngine, request: dict[str, Any]) -> dict[str, Any]:
+def run_whatif(base_eng: SimEngine, scen_eng: SimEngine, request: dict[str, Any], start_tick: int) -> dict[str, Any]:
+    """跑 What-if。呼叫端必須在主 event loop 上先把 live 引擎 clone 兩份再傳進來（避免與模擬迴圈同時讀寫）；
+    本函式只碰這兩個獨立 clone，可安全放在 worker thread。"""
     duration = int(request.get("duration_ticks", 600))
     duration = max(50, min(duration, 6000))
     injections = [dict(i) for i in request.get("injections", [])]
     for i in injections:
         i.pop("at_tick", None)
     t0 = time.perf_counter()
-    base_eng = live.clone()
-    scen_eng = live.clone()
     base_win, _, base_kpi = _run(base_eng, [], duration) if request.get("run_baseline", True) else (None, [], None)
     scen_win, scen_events, scen_kpi = _run(scen_eng, injections, duration)
     elapsed = time.perf_counter() - t0
@@ -104,7 +107,7 @@ def run_whatif(live: SimEngine, request: dict[str, Any]) -> dict[str, Any]:
         "ai_recommendation": rec,
         # 補充（schema 之外，前端對照表用）
         "window": {"baseline": base_win, "scenario": scen_win, "metrics": [{"key": k, "label": l, "higher_is_better": h} for k, l, h in METRICS]},
-        "start_tick": live.state["sim"]["tick"],
+        "start_tick": start_tick,
         "compute_ms": round(elapsed * 1000),
     }
 
