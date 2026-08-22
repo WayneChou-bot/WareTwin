@@ -61,7 +61,7 @@ class RateLimiter:
         while q and now - q[0] > window:
             q.popleft()
         if len(q) >= limit:
-            return False, round(window - (now - q[0]), 1)
+            return False, round(window - (now - q[0]), 1) if q else window
         q.append(now)
         return True, 0.0
 

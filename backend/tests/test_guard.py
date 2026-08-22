@@ -146,3 +146,21 @@ def test_rate_limiter_gc(monkeypatch):
     monkeypatch.setattr(time, "monotonic", lambda: time.time() + 10_000)   # 一萬秒後
     for i in range(10): rl.check("mutate", f"new{i}")
     assert all(k[1].startswith("new") for k in rl._hits)   # 舊 key 已清掉
+
+
+def test_whatif_rate_limit_error_carries_request_id(monkeypatch):
+    monkeypatch.setenv("TWIN_RATE_LIMIT", "1"); limiter.reset()
+    from app.guard import LIMITS
+    monkeypatch.setitem(LIMITS, "whatif", (1, 60.0))   # 第二個就被擋
+    with TestClient(app) as c:
+        with c.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            req = {"scenario_name": "t", "injections": [{"kind": "ROBOT_FAILURE", "robot_id": "R01"}], "duration_ticks": 60, "run_baseline": False}
+            ws.send_json({"type": "WHATIF_RUN", "request": req, "request_id": "w-41"})
+            ws.send_json({"type": "WHATIF_RUN", "request": req, "request_id": "w-42"})
+            for _ in range(400):
+                m = ws.receive_json()
+                if m["type"] == "ERROR":
+                    assert m["code"] == "RATE_LIMITED" and m["request_id"] == "w-42"; break
+            else:
+                raise AssertionError("no ERROR")

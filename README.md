@@ -98,7 +98,7 @@ WareTwin/
 ## 🧪 Tests
 
 ```bash
-cd backend && python -m pytest -q      # 32 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
+cd backend && python -m pytest -q      # 33 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
 cd frontend && npm test                 # 10 tests: same engine contract in TypeScript
 ```
@@ -115,7 +115,7 @@ The hosted demo is deliberately a **single shared simulation** — every visitor
 |---|---|
 | Input limits | `TASK_BURST.count ≤ 30`, injections ≤ 10 min, What-if ≤ 8 injections / 10 min, Copilot question ≤ 500 chars, VLM frame ≤ 400 KB; task locations must exist, match the task type and never be a charger (`sim/rules.py`, mirrored in TS) |
 | Rate limit (per client IP, in-memory, GC'd) | mutations 20/min · Copilot & VLM 10/min · What-if 4/min · WebSocket messages 120/min → `429` / `RATE_LIMITED`. Client IP is the last hop of `X-Forwarded-For` (`TWIN_TRUSTED_PROXIES`), so it cannot be spoofed |
-| Origin check | when `TWIN_CORS_ORIGINS` / `TWIN_CORS_REGEX` are set, WebSocket and POST must carry an allowed `Origin`; the regex only admits this project's own Vercel previews (`TWIN_ALLOW_NO_ORIGIN=1` re-enables curl) |
+| Origin check | when `TWIN_CORS_ORIGINS` is set, WebSocket and POST must carry an allowed `Origin`. Production allows only `https://ware-twin.vercel.app`; Vercel previews are off unless you add a `TWIN_CORS_REGEX` pinned to your own scope slug (`TWIN_ALLOW_NO_ORIGIN=1` re-enables curl) |
 | Body size | REST 512 KB counted on the ASGI stream (chunked / forged `Content-Length` included), WebSocket message 64 KB (UTF-8 bytes) |
 | Health | `/api/health` returns `503` when the simulation task died or has not advanced for `TWIN_HEALTH_STALL_S` seconds, so Render restarts it |
 

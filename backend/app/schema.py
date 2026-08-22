@@ -632,6 +632,7 @@ class CmdSelectRobot(_Base):
 class CmdWhatIfRun(_Base):
     type: Literal["WHATIF_RUN"] = "WHATIF_RUN"
     request: WhatIfRequest
+    request_id: Optional[str] = Field(default=None, max_length=32)   # 原樣帶回 WHATIF_RESULT / ERROR，前端據此關聯
 
 
 class CmdCopilotAsk(_Base):

@@ -33,12 +33,12 @@ const copilotListeners = new Set<(r: CopilotReply) => void>();
 export function onCopilotReply(fn: (r: CopilotReply) => void): () => void { copilotListeners.add(fn); return () => copilotListeners.delete(fn); }
 const whatifListeners = new Set<(r: unknown) => void>();
 export function onWhatIfResult(fn: (r: unknown) => void): () => void { whatifListeners.add(fn); return () => whatifListeners.delete(fn); }
-const whatifErrorListeners = new Set<(message: string) => void>();
+const whatifErrorListeners = new Set<(message: string, request_id: string | null) => void>();
 /** 後端對 WHATIF_RUN 回 ERROR（RATE_LIMITED / BAD_MESSAGE…）時通知，讓抽屜解除 Simulating 狀態 */
-export function onWhatIfError(fn: (message: string) => void): () => void { whatifErrorListeners.add(fn); return () => whatifErrorListeners.delete(fn); }
-/** 連線中斷時也要通知正在等待的 What-if */
-let whatifPending = false;
-export function markWhatIfPending(v: boolean) { whatifPending = v; }
+export function onWhatIfError(fn: (message: string, request_id: string | null) => void): () => void { whatifErrorListeners.add(fn); return () => whatifErrorListeners.delete(fn); }
+/** 正在等待結果的 What-if request_id（null = 沒有）；ERROR / WHATIF_RESULT 都要帶同一個 id 才會被當成它的回應 */
+let whatifPending: string | null = null;
+export function markWhatIfPending(id: string | null) { whatifPending = id; }
 
 export function wsSend(msg: ClientMessage): boolean {
   if (socket && socket.readyState === WebSocket.OPEN) { socket.send(JSON.stringify(msg)); return true; }
@@ -81,7 +81,7 @@ function open() {
   ws.onclose = () => {
     clearTimeout(timeout);
     if (socket === ws) socket = null;
-    if (whatifPending) { whatifPending = false; whatifErrorListeners.forEach((fn) => fn("connection lost — please run again")); }
+    if (whatifPending) { const id = whatifPending; whatifPending = null; whatifErrorListeners.forEach((fn) => fn("connection lost — please run again", id)); }
     onStateChange?.("offline");
     if (!stopped) reconnectTimer = window.setTimeout(open, 3000);
   };
@@ -107,7 +107,7 @@ function handle(msg: ServerMessage) {
     }
     case "HEATMAP": st.setHeat(msg.layer); break;
     case "COPILOT_REPLY": copilotListeners.forEach((fn) => fn(msg as unknown as CopilotReply)); break;
-    case "WHATIF_RESULT": whatifPending = false; whatifListeners.forEach((fn) => fn(msg.result)); break;
+    case "WHATIF_RESULT": if (!msg.request_id || msg.request_id === whatifPending) whatifPending = null; whatifListeners.forEach((fn) => fn(msg.result)); break;
     case "ERROR": {
       console.warn("[ws] server error", msg.code, msg.message);
       if (msg.code === "RATE_LIMITED" || msg.code === "TOO_LARGE" || msg.code === "BAD_TASK" || msg.code === "BAD_MESSAGE") {
@@ -115,8 +115,8 @@ function handle(msg: ServerMessage) {
         // Copilot 等待中的泡泡也要收掉
         const rid = (msg as unknown as { request_id?: string }).request_id;
         if (rid) copilotListeners.forEach((fn) => fn({ request_id: rid, text: `⏳ ${msg.message}`, citations: [] }));
-        // What-if 正在等結果：解除 Simulating（後端對 WHATIF_RUN 的錯誤不帶 request_id，但同時只會有一個在跑）
-        if (whatifPending && !rid) { whatifPending = false; whatifErrorListeners.forEach((fn) => fn(msg.message)); }
+        // 只有 request_id 等於正在等待的 What-if 才算它的錯誤（其他錯誤例如 BAD_TASK 不會誤關 Simulating）
+        if (whatifPending && rid === whatifPending) { const id = whatifPending; whatifPending = null; whatifErrorListeners.forEach((fn) => fn(msg.message, id)); }
       }
       break;
     }

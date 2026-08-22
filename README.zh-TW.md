@@ -97,7 +97,7 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 32 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
+cd backend && python -m pytest -q      # 33 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
 cd frontend && npm test                 # 10 個：TypeScript 引擎的相同契約
 ```
 
@@ -113,7 +113,7 @@ cd frontend && npm test                 # 10 個：TypeScript 引擎的相同契
 |---|---|
 | 輸入上限 | `TASK_BURST.count ≤ 30`、注入時長 ≤ 10 分鐘、What-if ≤ 8 個注入／10 分鐘、Copilot 問題 ≤ 500 字、VLM 影像 ≤ 400 KB；任務地點必須存在、符合任務類型、不可是充電樁（`sim/rules.py`，TS 同步） |
 | Rate limit（每個 client IP，記憶體內、會回收） | 改變狀態 20 次/分 · Copilot 與 VLM 10 次/分 · What-if 4 次/分 · WebSocket 訊息 120 次/分 → `429` / `RATE_LIMITED`。client IP 取 `X-Forwarded-For` 最後一段（`TWIN_TRUSTED_PROXIES`），無法偽造 |
-| Origin 檢查 | 設了 `TWIN_CORS_ORIGINS` / `TWIN_CORS_REGEX` 後，WebSocket 與 POST 必須帶允許的 `Origin`；regex 只放本專案自己的 Vercel preview（`TWIN_ALLOW_NO_ORIGIN=1` 可放行 curl） |
+| Origin 檢查 | 設了 `TWIN_CORS_ORIGINS` 後，WebSocket 與 POST 必須帶允許的 `Origin`。正式環境只允許 `https://ware-twin.vercel.app`；Vercel preview 預設不開，需要時再加鎖定自己 scope slug 的 `TWIN_CORS_REGEX`（`TWIN_ALLOW_NO_ORIGIN=1` 可放行 curl） |
 | Body 大小 | REST 512 KB 在 ASGI stream 層以實際 bytes 計算（chunked／造假 `Content-Length` 都擋）、WebSocket 單則 64 KB（UTF-8 bytes） |
 | Health | 模擬 task 死掉或超過 `TWIN_HEALTH_STALL_S` 秒沒推進，`/api/health` 回 `503`，Render 會自動重啟 |
 

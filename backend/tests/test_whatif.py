@@ -42,11 +42,11 @@ def test_whatif_endpoints():
         assert client.post("/api/whatif", json={"injections": [{"kind": "NOPE"}]}).status_code == 400
         with client.websocket_connect("/ws") as ws:
             ws.receive_json()
-            ws.send_json({"type": "WHATIF_RUN", "request": body})
+            ws.send_json({"type": "WHATIF_RUN", "request": body, "request_id": "w-test-1"})
             for _ in range(400):
                 m = ws.receive_json()
                 if m["type"] == "WHATIF_RESULT":
-                    assert m["result"]["request"]["duration_ticks"] == 300; break
+                    assert m["request_id"] == "w-test-1" and m["result"]["request"]["duration_ticks"] == 300; break
             else:
                 raise AssertionError("no WHATIF_RESULT")
         server.paused = True

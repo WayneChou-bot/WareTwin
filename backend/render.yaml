@@ -16,8 +16,7 @@ services:
       - key: TWIN_DB
         value: /tmp/twin.db
       - key: TWIN_CORS_ORIGINS
-        value: https://ware-twin.vercel.app   # 你的 Vercel 網域，多個用逗號分隔（設了之後 WS/POST 會檢查 Origin）
-      - key: TWIN_CORS_REGEX
-        value: https://ware-twin(-[a-z0-9-]+)?\.vercel\.app   # 只放自己專案的 Vercel preview（ware-twin-<hash>-<team>.vercel.app）
+        value: https://ware-twin.vercel.app   # 只允許正式網域（WS/POST 檢查 Origin）。要讓 Vercel preview 也能連，
+                                              # 加 TWIN_CORS_REGEX=https://ware-twin-[a-z0-9]+-<你的 scope slug>\.vercel\.app
       - key: TWIN_TRUSTED_PROXIES
         value: "1"                            # Render 的 proxy 會把真實 IP 附加到 X-Forwarded-For 尾端

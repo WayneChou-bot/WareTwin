@@ -3,7 +3,7 @@
  *  ☑ 情境 → Duration → RUN → 後端複製 LIVE 引擎跑 Baseline 與 Scenario → 對照表 / 關鍵事件 / AI 建議
  *  「Apply to LIVE」把同一組注入打到 LIVE。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFocusTrap } from "../ui/useFocusTrap";
 import { useStore, tickToClock } from "../../state/store";
 import { wsSend, onWhatIfResult, onWhatIfError, markWhatIfPending } from "../../services/ws";
@@ -42,8 +42,9 @@ export function WhatIfDrawer() {
   const [baseline, setBaseline] = useState(true);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => onWhatIfResult((r) => { setResult(r as WhatIfResultEx); setRunning(false); setErr(null); }), [setResult]);
-  useEffect(() => onWhatIfError((m) => { setRunning(false); setErr(m); }), []);
+  useEffect(() => onWhatIfResult((r) => { pendingId.current = null; setResult(r as WhatIfResultEx); setRunning(false); setErr(null); }), [setResult]);
+  const seq = useRef(0); const pendingId = useRef<string | null>(null);
+  useEffect(() => onWhatIfError((m, id) => { if (id === pendingId.current) { pendingId.current = null; setRunning(false); setErr(m); } }), []);
   const trap = useFocusTrap<HTMLElement>(open);
   useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [open, setDrawer]);
   if (!open) return null;
@@ -51,8 +52,9 @@ export function WhatIfDrawer() {
   const injections = () => PRESETS.filter((p) => sel.has(p.id)).map((p) => p.build());
   const run = () => {
     if (source !== "online" || sel.size === 0) return;
-    setRunning(true); setErr(null); markWhatIfPending(true);
-    wsSend({ type: "WHATIF_RUN", request: { scenario_name: PRESETS.filter((p) => sel.has(p.id)).map((p) => p.label).join(" + "), injections: injections(), duration_ticks: dur * 10, run_baseline: baseline } });
+    const request_id = `w${++seq.current}-${Date.now().toString(36)}`; pendingId.current = request_id;
+    setRunning(true); setErr(null); markWhatIfPending(request_id);
+    wsSend({ type: "WHATIF_RUN", request_id, request: { scenario_name: PRESETS.filter((p) => sel.has(p.id)).map((p) => p.label).join(" + "), injections: injections(), duration_ticks: dur * 10, run_baseline: baseline } });
   };
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fmt = (k: string, v: number) => k === "on_time_rate" || k === "utilization" ? `${Math.round(v * 100)}%` : k === "congestion_index" ? `${Math.round(v * 100)}%` : Number.isInteger(v) ? String(v) : v.toFixed(1);

@@ -280,7 +280,7 @@ class TwinServer:
             req = msg.request.model_dump(exclude_none=True)
             result = await self.run_whatif_safe(req)
             eng.emit("AI_DECISION", "AI_AGENT", "INFO", f"What-if '{req.get('scenario_name', 'scenario')}' simulated {req.get('duration_ticks', 600) // 10}s: throughput {result['delta'].get('throughput_per_min', 0):+} tasks/min", payload={"compute_ms": result["compute_ms"]})
-            await ws.send_text(json.dumps({"type": "WHATIF_RESULT", "result": result}, ensure_ascii=False))
+            await ws.send_text(json.dumps({"type": "WHATIF_RESULT", "request_id": msg.request_id, "result": result}, ensure_ascii=False))
 
     async def run_whatif_safe(self, req: dict[str, Any]) -> dict[str, Any]:
         """在主 event loop 上先 clone（此時沒有 tick 在進行），再把獨立的 clone 交給 worker thread 跑；同時只允許一個 What-if。"""

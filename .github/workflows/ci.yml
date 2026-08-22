@@ -7,18 +7,20 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: backend } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11", cache: pip, cache-dependency-path: backend/requirements-dev.txt }
-      - run: pip install -r requirements-dev.txt
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.11", cache: pip, cache-dependency-path: backend/requirements.lock }
+      # 跟 Render / Docker 裝同一份 lock，lock 壞掉 CI 會先紅；pip check 確認沒有相依衝突
+      - run: pip install -r requirements.lock && pip install "pytest>=8,<10" "httpx>=0.27,<1"
+      - run: pip check
       - run: python -m pytest -q
         env: { TWIN_DB: /tmp/twin_ci.db }
   frontend:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 20, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
       - run: npm test

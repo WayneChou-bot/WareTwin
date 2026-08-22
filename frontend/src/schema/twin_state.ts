@@ -458,9 +458,9 @@ export type ServerMessage =
   | { type: "FULL"; state: TwinState }
   | { type: "PATCH"; base_tick: number; tick: number; patch: DeepPartial<TwinState>; events: TwinEvent[] }
   | { type: "HEATMAP"; layer: HeatmapLayer }
-  | { type: "WHATIF_RESULT"; result: WhatIfResult }
+  | { type: "WHATIF_RESULT"; request_id?: string | null; result: WhatIfResult }
   | { type: "COPILOT_REPLY"; request_id: string; text: string; citations: Array<{ event_id?: EventId; robot_id?: RobotId; task_id?: TaskId }>; model?: string }
-  | { type: "ERROR"; code: string; message: string };
+  | { type: "ERROR"; code: string; message: string; request_id?: string | null };
 
 export type ClientMessage =
   | { type: "RESYNC" }
@@ -470,7 +470,7 @@ export type ClientMessage =
   | { type: "CREATE_TASK"; task: Pick<TaskState, "type" | "priority" | "source" | "destination" | "load_units"> & { deadline_s?: number } }
   | { type: "ACK_ALERT"; alert_id: AlertId }
   | { type: "SELECT_ROBOT"; robot_id: RobotId | null }           // 讓後端提高該機器人更新頻率 (可選)
-  | { type: "WHATIF_RUN"; request: WhatIfRequest }
+  | { type: "WHATIF_RUN"; request: WhatIfRequest; request_id?: string }
   | { type: "COPILOT_ASK"; request_id: string; question: string };
 
 export type DeepPartial<T> = {
