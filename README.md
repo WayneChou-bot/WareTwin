@@ -16,7 +16,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://typescriptlang.org)
 
-[**Live demo**](https://waretwin.vercel.app) · [Demo script](docs/DEMO.md) · [Architecture](#-architecture) · [繁體中文](README.zh-TW.md)
+[**Live demo**](https://ware-twin.vercel.app) · [Demo script](docs/DEMO.md) · [Architecture](#-architecture) · [繁體中文](README.zh-TW.md)
 
 <img src="docs/demo.gif" width="880" alt="WareTwin demo: 20 AMRs running, compound failure injected, VLM detects a human, Copilot explains the throughput drop" />
 

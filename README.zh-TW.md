@@ -15,7 +15,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)](https://python.org)
 
-[**線上 Demo**](https://waretwin.vercel.app) · [Demo 腳本](docs/DEMO.md) · [架構](#-架構) · [English](README.md)
+[**線上 Demo**](https://ware-twin.vercel.app) · [Demo 腳本](docs/DEMO.md) · [架構](#-架構) · [English](README.md)
 
 <img src="docs/demo.gif" width="880" alt="WareTwin demo" />
 
