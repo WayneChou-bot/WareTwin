@@ -1,0 +1,876 @@
+"""
+Digital Twin 模擬引擎 — frontend/src/simulation/engine.ts 的 Python 移植版。
+
+對應關係：方法名稱、tick 順序、FSM、評分權重、SIM 參數與 TS 版逐一相同。
+state 以純 dict 表示（與 TwinState JSON 完全一致），Pydantic 驗證在 API 邊界進行。
+"""
+from __future__ import annotations
+
+import math
+from typing import Any, Optional
+
+from .astar import NavGrid, astar, cell_center, is_walkable, nearest_walkable, to_cell
+from .navgrid import build_nav_grid
+
+# ─────────────────────────────────────────────────────────────
+# 常數（與 twin_state.ts THRESHOLDS / engine.ts SIM 相同）
+# ─────────────────────────────────────────────────────────────
+TH = dict(BATTERY_WARNING=20, BATTERY_CRITICAL=10, BATTERY_CHARGE_TO=95, CONGESTION_WARNING=0.6,
+          CONGESTION_BLOCK=0.85, TICK_MS=100, EVENT_RING_SIZE=500, THROUGHPUT_SERIES_SIZE=120)
+SIM = dict(
+    TICK_S=0.1, MAX_SPEED=1.5, ACCEL=1.2, TURN_SLOW=0.5, PICK_TICKS=40, DROP_TICKS=30,
+    BATTERY_MOVE=0.010, BATTERY_LOAD=0.004, BATTERY_IDLE=0.0008, CHARGE_RATE=0.06,
+    TASK_INTERVAL_TICKS=70, MAX_WAITING_TASKS=12, WAIT_REPLAN_TICKS=25, WAIT_BACKOFF_TICKS=80, STATION_ARRIVE_CELLS=3, ON_TIME_LIMIT_TICKS=2400,
+    IDLE_TO_PARK_TICKS=300, KPI_EVERY=10, SERIES_EVERY=600, EVENT_RING=500, ZONE_CAPACITY=6,
+)
+
+MASK = 0xFFFFFFFF
+
+
+def _imul(a: int, b: int) -> int:
+    return (a * b) & MASK
+
+
+class Mulberry32:
+    """與 JS 版 bit-level 一致的 PRNG。做成物件（不是 closure）讓引擎可以 deepcopy → What-if 複製後亂數流也一致。"""
+    __slots__ = ("s",)
+
+    def __init__(self, seed: int) -> None:
+        self.s = seed & MASK
+
+    def __call__(self) -> float:
+        self.s = (self.s + 0x6D2B79F5) & MASK
+        t = self.s
+        t = _imul(t ^ (t >> 15), 1 | t)
+        t = ((t + _imul(t ^ (t >> 7), 61 | t)) ^ t) & MASK
+        return ((t ^ (t >> 14)) & MASK) / 4294967296
+
+
+def mulberry32(seed: int) -> Mulberry32:
+    return Mulberry32(seed)
+
+
+def jsround(x: float) -> int:
+    """JS Math.round：.5 往 +∞。"""
+    return math.floor(x + 0.5)
+
+
+def js_to_fixed0(x: float) -> str:
+    return str(jsround(x)) if x >= 0 else str(-jsround(-x))
+
+
+def _sign(x: float) -> float:
+    return 1.0 if x > 0 else -1.0 if x < 0 else 0.0
+
+
+class RobotRt:
+    __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point")
+
+    def __init__(self) -> None:
+        self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
+        self.dwell = 0; self.wait_ticks = 0; self.target: Optional[tuple[int, int]] = None
+        self.goal_loc: Optional[str] = None; self.phase: Optional[str] = None
+        self.charger_id: Optional[str] = None; self.idle_ticks = 0; self.last_battery_alert = "NONE"
+
+
+class SimEngine:
+    def __init__(self, layout: dict[str, Any], seed: int = 42, initial_state: Optional[dict[str, Any]] = None) -> None:
+        self.layout = layout
+        self.grid: NavGrid = build_nav_grid(layout)
+        n = self.grid.cols * self.grid.rows
+        self.traffic = [0.0] * n
+        self.traffic_short = [0.0] * n
+        self.loc = {l["id"]: l for l in layout["locations"]}
+        self.rng = mulberry32(seed)
+        self.rt: dict[str, RobotRt] = {}
+        self.occupancy: dict[tuple[int, int], str] = {}
+        self.task_seq = 3812; self.event_seq = 0; self.decision_seq = 0
+        self.charger_busy: dict[str, Optional[str]] = {c["id"]: None for c in layout["charging_stations"]}
+        self.blocked_zones: set[str] = set()
+        self.congested_zones: dict[str, dict[str, float]] = {}   # zone → {level, until}
+        self.pending_injections: list[dict[str, Any]] = []
+        self.task_times: list[int] = []
+        self.on_time = 0; self.completed_count = 0; self.last_series_tick = 0
+        self.state: dict[str, Any] = (__import__("copy").deepcopy(initial_state) if initial_state else self._build_initial_state(seed))
+        for rid in self.state["robots"]:
+            self.rt[rid] = RobotRt()
+        self.next_task_tick = self.state["sim"]["tick"] + 10
+        # 每 tick 新產生的事件（給 WebSocket PATCH 用），由呼叫端清空
+        self.new_events: list[dict[str, Any]] = []
+        self._zone_bounds = {z["id"]: (min(p[0] for p in z["polygon"]), min(p[1] for p in z["polygon"]),
+                                       max(p[0] for p in z["polygon"]), max(p[1] for p in z["polygon"])) for z in layout["zones"]}
+
+    # ─────────────────────────────────────────────────────────
+    def _build_initial_state(self, seed: int) -> dict[str, Any]:
+        L = self.layout
+        robots: dict[str, Any] = {}
+        for sp in L["spawn"]["robots"]:
+            robots[sp["id"]] = {
+                "id": sp["id"], "model": "AMR-L", "position": [math.floor(sp["position"][0]) + 0.5, 0, math.floor(sp["position"][2]) + 0.5], "heading": sp["heading"],
+                "velocity": 0, "max_speed": SIM["MAX_SPEED"], "battery": sp["battery"], "status": "IDLE", "fsm": "IDLE",
+                "health": 95 + math.floor(self.rng() * 5), "current_task_id": None, "destination": None, "path": [], "path_index": 0,
+                "load": {"current": 0, "capacity": 4}, "zone": None, "eta_s": None, "fsm_since_tick": 0,
+                "stats": {"distance_m": 0, "tasks_completed": 0, "energy_wh": 0, "busy_ticks": 0, "wait_ticks": 0},
+            }
+        n = len(robots)
+        return {
+            "schema_version": "1.0", "layout_id": L["id"],
+            "sim": {"tick": 0, "tick_ms": TH["TICK_MS"], "speed": 1, "mode": "LIVE", "seed": seed, "baseline_snapshot_id": None},
+            "robots": robots, "tasks": {},
+            "zones": {z["id"]: {"id": z["id"], "status": "NORMAL", "robot_count": 0, "congestion": 0, "blocked_reason": None, "blocked_since_tick": None} for z in L["zones"]},
+            "conveyors": {c["id"]: {"id": c["id"], "status": "RUNNING", "speed_mps": c["speed_mps"], "items_on_belt": 4, "throughput_per_min": 4} for c in L["conveyors"]},
+            "cameras": {c["id"]: {"id": c["id"], "zone": c["zone"], "status": "ONLINE", "last_observation": None} for c in L["cameras"]},
+            "sensors": {s["id"]: {"id": s["id"], "kind": s["kind"], "zone": s["zone"], "status": "ONLINE", "value": None, "unit": None} for s in L["sensors"]},
+            "people": {}, "alerts": {}, "recent_events": [], "recent_decisions": [],
+            "kpi": {
+                "tick": 0, "fleet": {"total": n, "active": 0, "charging": 0, "idle": n, "warning": 0, "error": 0, "offline": 0},
+                "operation": {"throughput_per_min": 0, "completed_today": 0, "completed_target": 150, "pending": 0, "ongoing": 0, "avg_task_time_s": 0, "on_time_rate": 1, "avg_utilization": 0},
+                "efficiency": {"avg_travel_distance_m": 0, "avg_wait_time_s": 0, "congestion_index": 0, "energy_kwh": 0},
+                "throughput_series": [{"tick": 0, "completed": 0, "target": 0}],
+            },
+            "subsystems": {"WAREHOUSE": "NORMAL", "CONVEYORS": "NORMAL", "CHARGING": "NORMAL", "CCTV": "NORMAL", "NETWORK": "NORMAL"},
+        }
+
+    # ─────────────────────────────────────────────────────────
+    # 公開 API
+    # ─────────────────────────────────────────────────────────
+    def clone(self) -> "SimEngine":
+        """完整複製（state + FSM 執行期 + 充電樁 + 亂數狀態）。layout 與 grid 唯讀，共用不複製。"""
+        import copy
+        new = SimEngine.__new__(SimEngine)
+        for k, v in self.__dict__.items():
+            if k in ("layout", "grid", "loc", "_zone_bounds"):
+                setattr(new, k, v)
+            else:
+                setattr(new, k, copy.deepcopy(v))
+        new.new_events = []
+        return new
+
+    def inject(self, inj: dict[str, Any]) -> None:
+        self.pending_injections.append(inj)
+        tgt = inj.get("zone_id") and f" (Zone {inj['zone_id']})" or inj.get("robot_id") and f" ({inj['robot_id']})" or inj.get("conveyor_id") and f" ({inj['conveyor_id']})" or inj.get("camera_id") and f" ({inj['camera_id']})" or ""
+        self.emit("SCENARIO_INJECTED", "USER", "INFO", f"Scenario injected: {inj['kind']}{tgt}")
+
+    def block_zone(self, zone_id: str, reason: str, duration_ticks: int) -> None:
+        """由感知（VLM）觸發的 Zone 封鎖：不放人員模型，純封鎖 + 到期解除。"""
+        S = self.state; now = S["sim"]["tick"]
+        if zone_id not in S["zones"]: return
+        pid = f"VLM-{zone_id}-{now}"
+        b = self._zone_bounds[zone_id]
+        S["people"][pid] = {"id": pid, "kind": "WORKER", "position": [(b[0] + b[2]) / 2, 0, b[1] + 6.3], "heading": 0, "zone": zone_id, "expires_tick": now + duration_ticks}
+        if zone_id not in self.blocked_zones:
+            self.blocked_zones.add(zone_id); S["zones"][zone_id]["blocked_reason"] = reason; S["zones"][zone_id]["blocked_since_tick"] = now
+            self.emit("ZONE_BLOCKED", "VLM", "HIGH", f"Zone {zone_id} marked BLOCKED ({reason})", zone_id=zone_id)
+            self._raise_alert(f"zone-{zone_id}", "HIGH", f"Zone {zone_id}  Human Detected", "VLM · route blocked", zone_id=zone_id)
+            x0, z0, x1, z1 = b
+            for r in S["robots"].values():
+                if r["path"] and any(x0 <= c[0] < x1 and z0 <= c[1] < z1 for c in r["path"][r["path_index"]:]):
+                    self._set_fsm(r, "OBSTACLE_DETECTED")
+
+    def clear_injection(self, kind: str, target_id: str) -> None:
+        """解除注入：機器人恢復上線、輸送帶恢復、攝影機上線、人員離開、交通擁塞解除"""
+        S = self.state
+        if kind == "ROBOT_FAILURE":
+            r = S["robots"].get(target_id)
+            if r and r["fsm"] == "OFFLINE":
+                self._set_fsm(r, "IDLE"); self.rt[r["id"]].phase = None; self.rt[r["id"]].target = None
+                self._resolve_alert(f"off-{r['id']}"); self.emit("ROBOT_ONLINE", "USER", "INFO", f"{r['id']} back online", robot_id=r["id"])
+        elif kind == "CONVEYOR_FAILURE":
+            c = S["conveyors"].get(target_id); lc = next((x for x in self.layout["conveyors"] if x["id"] == target_id), None)
+            if c and lc:
+                c["status"] = "RUNNING"; c["speed_mps"] = lc["speed_mps"]; self._resolve_alert(f"cv-{c['id']}")
+                self.emit("CONVEYOR_STATUS_CHANGED", "CONVEYOR", "INFO", f"{c['id']} restored — RUNNING", conveyor_id=c["id"])
+        elif kind == "CAMERA_OFFLINE":
+            c = S["cameras"].get(target_id)
+            if c:
+                c["status"] = "ONLINE"
+                if all(x["status"] == "ONLINE" for x in S["cameras"].values()): S["subsystems"]["CCTV"] = "NORMAL"
+                self.emit("CAMERA_STATUS_CHANGED", "CAMERA", "INFO", f"{c['id']} online", camera_id=c["id"])
+        elif kind == "HUMAN_INTRUSION":
+            for p in S["people"].values():
+                if p["zone"] == target_id: p["expires_tick"] = S["sim"]["tick"]
+        elif kind == "TRAFFIC_CONGESTION":
+            self.congested_zones.pop(target_id, None)
+            self.emit("ZONE_UNBLOCKED", "USER", "INFO", f"Zone {target_id} traffic restriction lifted", zone_id=target_id)
+
+    def create_task(self, type_: str, priority: str, source: str, destination: str, load_units: int = 1) -> dict[str, Any]:
+        tid = f"A{self.task_seq}"; self.task_seq += 1
+        tick = self.state["sim"]["tick"]
+        task = {"id": tid, "type": type_, "priority": priority, "status": "WAITING", "source": source, "destination": destination,
+                "assigned_robot": None, "parent_task_id": None, "created_tick": tick, "assigned_tick": None, "started_tick": None,
+                "completed_tick": None, "deadline_tick": tick + SIM["ON_TIME_LIMIT_TICKS"], "eta_s": None, "load_units": load_units}
+        self.state["tasks"][tid] = task
+        self.emit("TASK_CREATED", "SIMULATION", "INFO", f"Task #{tid} created ({type_} {self.pretty(source)} → {self.pretty(destination)})", task_id=tid)
+        return task
+
+    def ack_alert(self, aid: str) -> None:
+        a = self.state["alerts"].get(aid)
+        if a:
+            a["acknowledged"] = True
+
+    def step(self) -> None:
+        S = self.state
+        S["sim"]["tick"] += 1
+        tick = S["sim"]["tick"]
+        self._apply_injections()
+        self._generate_tasks()
+        self._assign_tasks()
+        self._rebuild_occupancy()
+        for rid in list(S["robots"].keys()):
+            self._step_robot(S["robots"][rid], self.rt[rid])
+        self._update_zones()
+        self._decay_traffic()
+        if tick % SIM["KPI_EVERY"] == 0:
+            self._update_kpi(); self._update_devices()
+        if tick - self.last_series_tick >= SIM["SERIES_EVERY"]:
+            self._push_series()
+        self._prune_tasks()
+
+    # ─────────────────────────────────────────────────────────
+    # 任務
+    # ─────────────────────────────────────────────────────────
+    def _generate_tasks(self) -> None:
+        S = self.state
+        if S["sim"]["tick"] < self.next_task_tick:
+            return
+        self.next_task_tick = S["sim"]["tick"] + jsround(SIM["TASK_INTERVAL_TICKS"] * (0.5 + self.rng()))
+        waiting = sum(1 for t in S["tasks"].values() if t["status"] == "WAITING")
+        if waiting >= SIM["MAX_WAITING_TASKS"]:
+            return
+        locs = self.layout["locations"]
+        shelves = [l for l in locs if l["kind"] == "SHELF"]
+        packs = [l for l in locs if l["kind"] in ("PACKING", "SORTING")]
+        inbound = [l for l in locs if l["kind"] == "INBOUND"]
+        outbound = [l for l in locs if l["kind"] == "OUTBOUND"]
+
+        def pick(a: list) -> Any:
+            return a[math.floor(self.rng() * len(a))]
+
+        r = self.rng()
+        pr = "HIGH" if r < 0.15 else "CRITICAL" if r < 0.18 else "NORMAL"
+        if r < 0.55:
+            self.create_task("PICK", pr, pick(shelves)["id"], pick(packs)["id"])
+        elif r < 0.8:
+            self.create_task("REPLENISH", pr, pick(inbound)["id"], pick(shelves)["id"])
+        else:
+            self.create_task("TRANSPORT", pr, pick(packs)["id"], pick(outbound)["id"])
+
+    def _assign_tasks(self) -> None:
+        S = self.state
+        prio_rank = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3}
+        waiting = sorted((t for t in S["tasks"].values() if t["status"] == "WAITING"), key=lambda t: (prio_rank[t["priority"]], t["created_tick"]))
+        if not waiting:
+            return
+        idle = [r for r in S["robots"].values() if r["fsm"] == "IDLE" and r["status"] not in ("OFFLINE", "ERROR") and r["battery"] > TH["BATTERY_WARNING"]]
+        weights = {"distance": 0.35, "battery": 0.25, "workload": 0.15, "congestion": 0.15, "health": 0.10}
+        for task in waiting:
+            if not idle:
+                return
+            src = self.loc.get(task["source"])
+            if not src:
+                task["status"] = "FAILED"; continue
+            cands = []
+            for r in idle:
+                d = math.hypot(r["position"][0] - src["access_point"][0], r["position"][2] - src["access_point"][1])
+                zone = S["zones"].get(r["zone"]) if r["zone"] else None
+                cong = zone["congestion"] if zone else 0
+                tc = r["stats"]["tasks_completed"]
+                workload = "HIGH" if tc > 8 else "MEDIUM" if tc > 4 else "LOW"
+                score = (weights["distance"] * (1 - min(1, d / 120)) + weights["battery"] * (r["battery"] / 100)
+                         + weights["workload"] * (1 if workload == "LOW" else 0.6 if workload == "MEDIUM" else 0.2)
+                         + weights["congestion"] * (1 - cong) + weights["health"] * (r["health"] / 100))
+                reasons = [f"{js_to_fixed0(d)}m from task", f"{js_to_fixed0(r['battery'])}% battery", f"{workload.lower()} workload"]
+                if cong < 0.3:
+                    reasons.append("no route congestion")
+                cands.append({"robot_id": r["id"], "score": jsround(score * 1000) / 1000, "distance_m": jsround(d), "battery": jsround(r["battery"]),
+                              "workload": workload, "congestion": jsround(cong * 100) / 100, "health": r["health"], "reasons": reasons, "rejected_reason": None})
+            cands.sort(key=lambda c: -c["score"])
+            best = cands[0]
+            for c in cands[1:]:
+                c["rejected_reason"] = ("battery too low" if c["battery"] < 40 else "farther from task" if c["distance_m"] > best["distance_m"] * 1.5
+                                        else "high workload" if c["workload"] == "HIGH" else "lower score")
+            robot = S["robots"][best["robot_id"]]
+            idle.remove(robot)
+            task["status"] = "ASSIGNED"; task["assigned_robot"] = robot["id"]; task["assigned_tick"] = S["sim"]["tick"]
+            robot["current_task_id"] = task["id"]
+            self._set_fsm(robot, "TASK_ASSIGNED")
+            self.decision_seq += 1
+            S["recent_decisions"].insert(0, {"id": f"D{self.decision_seq}", "tick": S["sim"]["tick"], "kind": "TASK_ASSIGNMENT", "task_id": task["id"],
+                                             "selected_robot": robot["id"], "candidates": cands[:5], "weights": weights, "narrative": None})
+            if len(S["recent_decisions"]) > 50:
+                S["recent_decisions"].pop()
+            self.emit("TASK_ASSIGNED", "FLEET_MANAGER", "INFO", f"Task #{task['id']} assigned to {robot['id']} ({best['distance_m']}m, {best['battery']}%)", task_id=task["id"], robot_id=robot["id"])
+
+    def _prune_tasks(self) -> None:
+        S = self.state; tick = S["sim"]["tick"]
+        for tid in [tid for tid, t in S["tasks"].items() if t["status"] in ("COMPLETED", "FAILED", "TRANSFERRED", "CANCELLED") and t["completed_tick"] is not None and tick - t["completed_tick"] > 3000]:
+            del S["tasks"][tid]
+
+    # ─────────────────────────────────────────────────────────
+    # FSM
+    # ─────────────────────────────────────────────────────────
+    def _set_fsm(self, r: dict[str, Any], fsm: str) -> None:
+        if r["fsm"] == fsm:
+            return
+        r["fsm"] = fsm; r["fsm_since_tick"] = self.state["sim"]["tick"]
+        r["status"] = self._status_of(r)
+
+    @staticmethod
+    def _status_of(r: dict[str, Any]) -> str:
+        f = r["fsm"]
+        if f == "OFFLINE": return "OFFLINE"
+        if f == "ERROR": return "ERROR"
+        if f == "CHARGING": return "CHARGING"
+        if r["battery"] < TH["BATTERY_CRITICAL"]: return "ERROR"
+        if r["battery"] < TH["BATTERY_WARNING"]: return "WARNING"
+        if f == "IDLE": return "IDLE"
+        return "ACTIVE"
+
+    def _step_robot(self, r: dict[str, Any], rt: RobotRt) -> None:
+        S = self.state; tick = S["sim"]["tick"]
+        if r["fsm"] == "OFFLINE":
+            r["velocity"] = 0; return
+        self._battery_tick(r, rt)
+        task = S["tasks"].get(r["current_task_id"]) if r["current_task_id"] else None
+        f = r["fsm"]
+        if f == "IDLE":
+            r["velocity"] = 0; rt.idle_ticks += 1
+            if r["battery"] < TH["BATTERY_WARNING"] + 15 and self._free_charger():
+                self._go_charge(r, rt)
+            else:
+                if rt.idle_ticks > SIM["IDLE_TO_PARK_TICKS"] and not rt.phase:
+                    p = self._park_spot(r)
+                    if p:
+                        self._plan_to(r, rt, p, "TO_PARK")
+                if rt.phase == "TO_PARK":
+                    self._move_along_path(r, rt)
+                    if rt.target is None:
+                        rt.phase = None
+        elif f == "TASK_ASSIGNED":
+            rt.idle_ticks = 0
+            if not task:
+                self._set_fsm(r, "IDLE")
+            else:
+                src = self.loc[task["source"]]
+                self._plan_to(r, rt, tuple(src["access_point"]), "TO_SOURCE", task["source"])
+                task["status"] = "IN_PROGRESS"; task["started_tick"] = tick
+                self._set_fsm(r, "NAVIGATING")
+        elif f == "NAVIGATING":
+            if not task:
+                self._set_fsm(r, "IDLE")
+            else:
+                self._move_along_path(r, rt)
+                if rt.target is None:
+                    rt.dwell = SIM["PICK_TICKS"]; self._set_fsm(r, "PICKING")
+        elif f == "PICKING":
+            r["velocity"] = 0
+            rt.dwell -= 1
+            if rt.dwell <= 0 and task:
+                r["load"]["current"] = min(r["load"]["capacity"], task["load_units"])
+                self.emit("TASK_STARTED", "ROBOT", "INFO", f"{r['id']} picked item at {self.pretty(task['source'])}", robot_id=r["id"], task_id=task["id"])
+                self._plan_to(r, rt, tuple(self.loc[task["destination"]]["access_point"]), "TO_DEST", task["destination"])
+                self._set_fsm(r, "TRANSPORTING")
+        elif f == "TRANSPORTING":
+            if not task:
+                self._set_fsm(r, "IDLE")
+            else:
+                low = False
+                if r["battery"] < TH["BATTERY_WARNING"] and rt.last_battery_alert != "CRIT":
+                    remain = self._remaining_path_length(r)
+                    need = remain * (SIM["BATTERY_MOVE"] + SIM["BATTERY_LOAD"]) / (SIM["MAX_SPEED"] * SIM["TICK_S"]) + 3
+                    if need > r["battery"] - TH["BATTERY_CRITICAL"]:
+                        self._set_fsm(r, "LOW_BATTERY"); low = True
+                if not low:
+                    self._move_along_path(r, rt)
+                    if rt.target is None:
+                        rt.dwell = SIM["DROP_TICKS"] * self._station_slowdown(task["destination"]); self._set_fsm(r, "DELIVERING")
+        elif f == "DELIVERING":
+            r["velocity"] = 0
+            rt.dwell -= 1
+            if rt.dwell <= 0:
+                self._complete_task(r, rt)
+        elif f == "COMPLETED":
+            self._set_fsm(r, "IDLE"); rt.idle_ticks = 0
+        elif f == "LOW_BATTERY":
+            r["velocity"] = 0; self._set_fsm(r, "TASK_TRANSFER")
+        elif f == "TASK_TRANSFER":
+            if task:
+                task["status"] = "TRANSFERRED"; task["completed_tick"] = tick
+                nt = self.create_task(task["type"], "HIGH" if task["priority"] == "NORMAL" else task["priority"], task["source"], task["destination"], task["load_units"])
+                nt["parent_task_id"] = task["id"]
+                self.emit("TASK_TRANSFERRED", "FLEET_MANAGER", "MEDIUM", f"{r['id']} low battery — task #{task['id']} re-queued as #{nt['id']}", robot_id=r["id"], task_id=nt["id"])
+                r["load"]["current"] = 0; r["current_task_id"] = None
+            self._go_charge(r, rt)
+        elif f == "GOING_TO_CHARGE":
+            self._move_along_path(r, rt)
+            if rt.target is None:
+                self._set_fsm(r, "CHARGING")
+                self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} charging started ({js_to_fixed0(r['battery'])}%)", robot_id=r["id"])
+        elif f == "CHARGING":
+            r["velocity"] = 0
+            r["battery"] = min(100, r["battery"] + SIM["CHARGE_RATE"])
+            if r["battery"] >= TH["BATTERY_CHARGE_TO"]:
+                if rt.charger_id:
+                    self.charger_busy[rt.charger_id] = None
+                rt.charger_id = None
+                rt.last_battery_alert = "NONE"; self._resolve_alert(f"bat-{r['id']}")
+                self._set_fsm(r, "IDLE"); rt.idle_ticks = 0
+                self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} charging complete", robot_id=r["id"])
+        elif f == "OBSTACLE_DETECTED":
+            self._set_fsm(r, "REPLANNING")
+        elif f == "REPLANNING":
+            if rt.target:
+                p = astar(self.grid, to_cell(r["position"][0], r["position"][2]), rt.target, blocked=self._blocked_cells(r["id"]), cost_map=self._congestion_cost())
+                if p is not None:
+                    r["path"] = [list(c) for c in p]; r["path_index"] = 0; rt.wait_ticks = 0
+                    self.emit("ROUTE_REPLANNED", "PLANNER", "LOW", f"{r['id']} rerouted ({len(p)} cells)", robot_id=r["id"], task_id=r["current_task_id"])
+            self._set_fsm(r, "TRANSPORTING" if rt.phase == "TO_DEST" else "GOING_TO_CHARGE" if rt.phase == "TO_CHARGER" else "IDLE" if rt.phase == "TO_PARK" else "NAVIGATING")
+        elif f == "ERROR":
+            r["velocity"] = 0
+        r["status"] = self._status_of(r)
+        if r["fsm"] not in ("IDLE", "CHARGING"):
+            r["stats"]["busy_ticks"] += 1
+        r["zone"] = self._zone_at(r["position"][0], r["position"][2])
+
+    def _complete_task(self, r: dict[str, Any], rt: RobotRt) -> None:
+        S = self.state
+        task = S["tasks"].get(r["current_task_id"]) if r["current_task_id"] else None
+        if task:
+            task["status"] = "COMPLETED"; task["completed_tick"] = S["sim"]["tick"]
+            self.task_times.append(S["sim"]["tick"] - task["created_tick"])
+            if len(self.task_times) > 200:
+                self.task_times.pop(0)
+            self.completed_count += 1
+            if task["deadline_tick"] is None or S["sim"]["tick"] <= task["deadline_tick"]:
+                self.on_time += 1
+            r["stats"]["tasks_completed"] += 1
+            self.emit("TASK_COMPLETED", "ROBOT", "INFO", f"{r['id']} completed task #{task['id']} at {self.pretty(task['destination'])}", robot_id=r["id"], task_id=task["id"])
+        r["load"]["current"] = 0; r["current_task_id"] = None; r["destination"] = None; rt.phase = None; rt.goal_loc = None
+        self._set_fsm(r, "COMPLETED")
+
+    # ─────────────────────────────────────────────────────────
+    # 路徑與移動
+    # ─────────────────────────────────────────────────────────
+    def _plan_to(self, r: dict[str, Any], rt: RobotRt, point: tuple[float, float], phase: str, loc_id: Optional[str] = None) -> None:
+        start = to_cell(r["position"][0], r["position"][2])
+        goal = nearest_walkable(self.grid, point[0], point[1])
+        path = astar(self.grid, start, goal, blocked=self._blocked_cells(r["id"]), cost_map=self._congestion_cost())
+        if path is None:
+            path = astar(self.grid, start, goal)
+        if path is None:
+            path = []
+        r["path"] = [list(c) for c in path]; r["path_index"] = 0
+        rt.target = goal; rt.phase = phase; rt.goal_loc = loc_id; rt.wait_ticks = 0; rt.backing_off = False; rt.resume_point = None
+        r["destination"] = loc_id
+        if not path and start != goal:
+            rt.target = None
+        self._update_eta(r)
+
+    def _move_along_path(self, r: dict[str, Any], rt: RobotRt) -> None:
+        if rt.target is None:
+            return
+        if r["path_index"] >= len(r["path"]):
+            rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; return
+        nxt = r["path"][r["path_index"]]
+        ncell = (nxt[0], nxt[1])
+        tx, tz = cell_center(ncell)
+        pos = r["position"]
+        dx = tx - pos[0]; dz = tz - pos[2]
+        dist = math.hypot(dx, dz)
+        occ = self.occupancy.get(ncell)
+        my_cell = to_cell(pos[0], pos[2])
+        entering = my_cell != ncell
+        if entering and not occ and ncell[0] != my_cell[0] and ncell[1] != my_cell[1]:
+            a = self.occupancy.get((ncell[0], my_cell[1])); b = self.occupancy.get((my_cell[0], ncell[1]))
+            if a and a != r["id"]: occ = a
+            elif b and b != r["id"]: occ = b
+        if entering and occ and occ != r["id"]:
+            remaining0 = len(r["path"]) - r["path_index"]
+            # 工作站前排隊：距目標 ≤ N 格就視為到達、就地作業
+            if not rt.backing_off and remaining0 <= SIM["STATION_ARRIVE_CELLS"] and rt.phase in ("TO_SOURCE", "TO_DEST"):
+                rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; r["eta_s"] = 0; rt.wait_ticks = 0; return
+            r["velocity"] = max(0, r["velocity"] - SIM["ACCEL"] * SIM["TICK_S"] * 2)
+            rt.wait_ticks += 1; r["stats"]["wait_ticks"] += 1
+            other = self.state["robots"].get(occ)
+            mutual = bool(other) and other["path_index"] < len(other["path"]) and tuple(other["path"][other["path_index"]]) == my_cell
+            if mutual and rt.wait_ticks > 10 and self._yields_to(r, other):
+                self._back_off(r, rt); return
+            if rt.wait_ticks == SIM["WAIT_REPLAN_TICKS"]:
+                self.emit("OBSTACLE_DETECTED", "ROBOT", "LOW", f"{r['id']} blocked by {occ} — replanning", robot_id=r["id"])
+                self._set_fsm(r, "OBSTACLE_DETECTED")
+            elif rt.wait_ticks >= SIM["WAIT_BACKOFF_TICKS"]:
+                self._back_off(r, rt)
+            return
+        rt.wait_ticks = 0
+        if entering:
+            self.occupancy[ncell] = r["id"]   # 立刻預約下一格
+            if ncell[0] != my_cell[0] and ncell[1] != my_cell[1]:   # 斜向：兩個正交鄰格也預約
+                for k in ((ncell[0], my_cell[1]), (my_cell[0], ncell[1])):
+                    if k not in self.occupancy: self.occupancy[k] = r["id"]
+        desired = math.atan2(dz, dx)
+        dh = desired - r["heading"]
+        while dh > math.pi: dh -= 2 * math.pi
+        while dh < -math.pi: dh += 2 * math.pi
+        turning = abs(dh) > 0.3
+        remaining = len(r["path"]) - r["path_index"]
+        walk = self.grid.cells[ncell[1] * self.grid.cols + ncell[0]] == 2
+        vmax = r["max_speed"] * (SIM["TURN_SLOW"] if turning else 1) * (0.5 if remaining <= 1 else 1) * (0.6 if walk else 1) * (self._zone_speed_factor(ncell) if self.congested_zones else 1)
+        r["velocity"] = min(vmax, r["velocity"] + SIM["ACCEL"] * SIM["TICK_S"])
+        r["heading"] += _sign(dh) * min(abs(dh), 4.0 * SIM["TICK_S"])
+        step_len = min(dist, r["velocity"] * SIM["TICK_S"])
+        if dist > 1e-6:
+            pos[0] += (dx / dist) * step_len; pos[2] += (dz / dist) * step_len
+        r["stats"]["distance_m"] += step_len
+        ci = my_cell[1] * self.grid.cols + my_cell[0]
+        if 0 <= ci < len(self.traffic):
+            self.traffic[ci] += 1; self.traffic_short[ci] += 1
+        if dist - step_len < 0.08:
+            r["path_index"] += 1
+            self.occupancy[ncell] = r["id"]
+            if r["path_index"] >= len(r["path"]):
+                rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; r["eta_s"] = 0
+                if rt.backing_off and rt.resume_point:
+                    rp = rt.resume_point; rt.backing_off = False; rt.resume_point = None
+                    self._plan_to(r, rt, rp, rt.phase or "TO_SOURCE", rt.goal_loc)
+        if self.state["sim"]["tick"] % 10 == 0:
+            self._update_eta(r)
+
+    @staticmethod
+    def _yields_to(me: dict[str, Any], other: dict[str, Any]) -> bool:
+        """誰讓路：空車讓載貨車；都一樣時編號大的讓"""
+        if (me["load"]["current"] > 0) != (other["load"]["current"] > 0):
+            return me["load"]["current"] == 0
+        return me["id"] > other["id"]
+
+    def _back_off(self, r: dict[str, Any], rt: RobotRt) -> None:
+        """讓路：走到附近一個沒人要經過的空格，之後回到原目標重新規劃"""
+        if rt.backing_off or rt.target is None:
+            rt.wait_ticks = 0; return
+        my = to_cell(r["position"][0], r["position"][2])
+        claimed: set[tuple[int, int]] = set()
+        for o in self.state["robots"].values():
+            if o["id"] == r["id"]: continue
+            claimed.add(to_cell(o["position"][0], o["position"][2]))
+            for c in o["path"][o["path_index"]:o["path_index"] + 4]:
+                claimed.add((c[0], c[1]))
+        best = None; best_d = 99
+        for dr in range(-3, 4):
+            for dc in range(-3, 4):
+                if not dr and not dc: continue
+                c = (my[0] + dc, my[1] + dr)
+                if not is_walkable(self.grid, c[0], c[1]) or c in claimed: continue
+                d = abs(dr) + abs(dc)
+                if d < best_d: best_d = d; best = c
+        rt.wait_ticks = 0
+        if best is None: return
+        p = astar(self.grid, my, best, blocked=claimed)
+        if not p: return
+        gx, gz = cell_center(rt.target)
+        rt.resume_point = (gx, gz); rt.backing_off = True; rt.target = best
+        r["path"] = [list(c) for c in p]; r["path_index"] = 0
+        self.emit("ROBOT_COLLISION_AVOIDED", "PLANNER", "LOW", f"{r['id']} yields (back-off {len(p)} cells)", robot_id=r["id"])
+
+    def _remaining_path_length(self, r: dict[str, Any]) -> float:
+        length = 0.0; px, pz = r["position"][0], r["position"][2]
+        for i in range(r["path_index"], len(r["path"])):
+            cx, cz = cell_center((r["path"][i][0], r["path"][i][1]))
+            length += math.hypot(cx - px, cz - pz); px, pz = cx, cz
+        return length
+
+    def _update_eta(self, r: dict[str, Any]) -> None:
+        r["eta_s"] = jsround(self._remaining_path_length(r) / (r["max_speed"] * 0.8)) if r["path"] else None
+
+    def _rebuild_occupancy(self) -> None:
+        self.occupancy.clear()
+        for rid, r in self.state["robots"].items():
+            c = to_cell(r["position"][0], r["position"][2]); self.occupancy[c] = rid
+            if r["path_index"] < len(r["path"]):
+                n = (r["path"][r["path_index"]][0], r["path"][r["path_index"]][1])
+                if n not in self.occupancy:
+                    self.occupancy[n] = rid
+                if n[0] != c[0] and n[1] != c[1]:   # 斜向：正交鄰格一起預約
+                    for k in ((n[0], c[1]), (c[0], n[1])):
+                        if k not in self.occupancy: self.occupancy[k] = rid
+
+    def _blocked_cells(self, self_id: str) -> set[tuple[int, int]]:
+        s = {k for k, v in self.occupancy.items() if v != self_id}
+        for zid in self.blocked_zones:
+            b = self._zone_bounds.get(zid)
+            if not b: continue
+            x0, z0, x1, z1 = b
+            for c in range(math.floor(x0), math.ceil(x1)):
+                for rr in range(math.floor(z0), math.ceil(z1)):
+                    s.add((c, rr))
+        return s
+
+    def _congestion_cost(self) -> Optional[list[float]]:
+        mx = max(self.traffic) if self.traffic else 0
+        if mx < 1 and not self.congested_zones:
+            return None
+        out = [t * (0.8 / mx) for t in self.traffic] if mx >= 1 else [0.0] * len(self.traffic)
+        for zid, cz in self.congested_zones.items():
+            b = self._zone_bounds.get(zid)
+            if not b: continue
+            x0, z0, x1, z1 = b; add = 3 * cz["level"]; cols = self.grid.cols
+            for rr in range(math.floor(z0), math.ceil(z1)):
+                base = rr * cols
+                for c in range(math.floor(x0), math.ceil(x1)):
+                    out[base + c] += add
+        return out
+
+    def _zone_speed_factor(self, cell: tuple[int, int]) -> float:
+        for zid, cz in self.congested_zones.items():
+            b = self._zone_bounds.get(zid)
+            if b and b[0] <= cell[0] < b[2] and b[1] <= cell[1] < b[3]:
+                return 1 - 0.7 * cz["level"]
+        return 1.0
+
+    def _decay_traffic(self) -> None:
+        if self.state["sim"]["tick"] % 5 == 0:
+            self.traffic = [t * 0.9985 for t in self.traffic]
+            self.traffic_short = [t * 0.975 for t in self.traffic_short]
+
+    # ─────────────────────────────────────────────────────────
+    # 電池
+    # ─────────────────────────────────────────────────────────
+    def _battery_tick(self, r: dict[str, Any], rt: RobotRt) -> None:
+        if r["fsm"] == "CHARGING":
+            return
+        moving = r["velocity"] > 0.05
+        drain = (SIM["BATTERY_MOVE"] * (r["velocity"] / r["max_speed"]) + (SIM["BATTERY_LOAD"] if r["load"]["current"] > 0 else 0)) if moving else SIM["BATTERY_IDLE"]
+        r["battery"] = max(0, r["battery"] - drain)
+        r["stats"]["energy_wh"] += drain * 0.5
+        b = r["battery"]
+        if b < TH["BATTERY_CRITICAL"] and rt.last_battery_alert != "CRIT":
+            rt.last_battery_alert = "CRIT"
+            self.emit("ROBOT_BATTERY_CRITICAL", "ROBOT", "CRITICAL", f"{r['id']} Battery Critical ({js_to_fixed0(b)}%)", robot_id=r["id"], zone_id=r["zone"])
+            self._raise_alert(f"bat-{r['id']}", "CRITICAL", f"{r['id']}  Battery Critical", f"{js_to_fixed0(b)}% remaining", robot_id=r["id"], zone_id=r["zone"])
+        elif b < TH["BATTERY_WARNING"] and rt.last_battery_alert == "NONE":
+            rt.last_battery_alert = "WARN"
+            self.emit("ROBOT_BATTERY_LOW", "ROBOT", "HIGH", f"{r['id']} Battery Low ({js_to_fixed0(b)}%)", robot_id=r["id"], zone_id=r["zone"])
+            self._raise_alert(f"bat-{r['id']}", "HIGH", f"{r['id']}  Battery Low", f"{js_to_fixed0(b)}% remaining", robot_id=r["id"], zone_id=r["zone"])
+        if b <= 0 and r["fsm"] != "ERROR":
+            self._set_fsm(r, "ERROR")
+            self.emit("ROBOT_OFFLINE", "ROBOT", "CRITICAL", f"{r['id']} battery depleted — stopped", robot_id=r["id"])
+
+    def _station_slowdown(self, loc_id: str) -> int:
+        """供應該工作站的輸送帶故障時，卸貨要等人工處理：停留時間 ×4（Demo 04 的瓶頸來源）"""
+        cv = next((c for c in self.layout["conveyors"] if c.get("feeds") == loc_id), None)
+        if not cv: return 1
+        st = self.state["conveyors"].get(cv["id"], {}).get("status")
+        return 4 if st in ("ERROR", "STOPPED") else 2 if st in ("WARNING", "MAINTENANCE") else 1
+
+    def _update_devices(self) -> None:
+        S = self.state; robots = list(S["robots"].values()); tick = S["sim"]["tick"]
+        for sid, s in S["sensors"].items():
+            ls = next((x for x in self.layout["sensors"] if x["id"] == sid), None)
+            if not ls or s["status"] == "OFFLINE": continue
+            near = sum(1 for r in robots if math.hypot(r["position"][0] - ls["position"][0], r["position"][2] - ls["position"][2]) < 10)
+            if s["kind"] == "PRESENCE": s["value"] = 1 if near > 0 else 0; s["unit"] = "bool"
+            elif s["kind"] == "LIDAR": s["value"] = near; s["unit"] = "objects"
+            elif s["kind"] == "TEMP": s["value"] = jsround((21 + math.sin(tick / 3000) * 1.5) * 10) / 10; s["unit"] = "°C"
+            elif s["kind"] == "WEIGHT": cv = S["conveyors"].get("CV03"); s["value"] = cv["items_on_belt"] * 12 if cv else 0; s["unit"] = "kg"
+        for cid, c in S["conveyors"].items():
+            lc = next((x for x in self.layout["conveyors"] if x["id"] == cid), None)
+            if c["status"] == "RUNNING":
+                deliveries = sum(1 for r in robots if r["fsm"] == "DELIVERING" and lc and r["destination"] == lc.get("feeds"))
+                c["items_on_belt"] = max(0, min(12, c["items_on_belt"] + deliveries - (1 if tick % 30 == 0 else 0)))
+                c["throughput_per_min"] = jsround((2 + c["items_on_belt"] * 0.3) * 10) / 10
+            else:
+                c["throughput_per_min"] = 0
+
+    def _free_charger(self) -> Optional[str]:
+        for cid, v in self.charger_busy.items():
+            if not v:
+                return cid
+        return None
+
+    def _go_charge(self, r: dict[str, Any], rt: RobotRt) -> None:
+        cid = self._free_charger()
+        if not cid:
+            self._set_fsm(r, "IDLE"); return
+        c = next(cc for cc in self.layout["charging_stations"] if cc["id"] == cid)
+        self.charger_busy[cid] = r["id"]; rt.charger_id = cid
+        self._plan_to(r, rt, tuple(c["access_point"]), "TO_CHARGER", cid)
+        self._set_fsm(r, "GOING_TO_CHARGE")
+
+    def _park_spot(self, r: dict[str, Any]) -> Optional[tuple[float, float]]:
+        parks = self.layout["parking"]
+        if not parks:
+            return None
+        p = parks[0]
+        i = int("".join(ch for ch in r["id"] if ch.isdigit())) - 1
+        x = math.floor(p["rect"][0] + 1 + (i % 10) * 2) + 0.5; z = math.floor(p["rect"][1] + 1 + (i // 10) * 2.2) + 0.5
+        if math.hypot(r["position"][0] - x, r["position"][2] - z) < 1.5:
+            return None
+        return (x, z)
+
+    # ─────────────────────────────────────────────────────────
+    # Zone / KPI / 事件
+    # ─────────────────────────────────────────────────────────
+    def _zone_at(self, x: float, z: float) -> Optional[str]:
+        for zid, (x0, z0, x1, z1) in self._zone_bounds.items():
+            if x0 <= x <= x1 and z0 <= z <= z1:
+                return zid
+        return None
+
+    def _update_zones(self) -> None:
+        S = self.state
+        counts: dict[str, int] = {}
+        for r in S["robots"].values():
+            if r["zone"]:
+                counts[r["zone"]] = counts.get(r["zone"], 0) + 1
+        for zid, z in S["zones"].items():
+            z["robot_count"] = counts.get(zid, 0)
+            z["congestion"] = min(1, z["robot_count"] / SIM["ZONE_CAPACITY"])
+            if zid in self.blocked_zones:
+                z["status"] = "BLOCKED"; continue
+            inj = self.congested_zones.get(zid)
+            if inj: z["congestion"] = max(z["congestion"], inj["level"])
+            was = z["status"]
+            z["status"] = "CONGESTED" if z["congestion"] >= TH["CONGESTION_WARNING"] else "NORMAL"
+            if z["status"] == "CONGESTED" and was != "CONGESTED":
+                self.emit("ZONE_CONGESTION_HIGH", "SIMULATION", "MEDIUM", f"Zone {zid} congestion high ({z['robot_count']} robots)", zone_id=zid)
+
+    def _update_kpi(self) -> None:
+        S = self.state; K = S["kpi"]; robots = list(S["robots"].values()); tasks = list(S["tasks"].values()); tick = S["sim"]["tick"]
+        K["tick"] = tick
+        fleet = {"total": len(robots), "active": 0, "charging": 0, "idle": 0, "warning": 0, "error": 0, "offline": 0}
+        for r in robots:
+            fleet[r["status"].lower()] += 1
+        K["fleet"] = fleet
+        win = 3000
+        recent = sum(1 for t in tasks if t["status"] == "COMPLETED" and t["completed_tick"] is not None and tick - t["completed_tick"] < win)
+        K["operation"] = {
+            "throughput_per_min": jsround((recent / min(5, max(1, tick / 600))) * 10) / 10,
+            "completed_today": self.completed_count, "completed_target": 150,
+            "pending": sum(1 for t in tasks if t["status"] == "WAITING"),
+            "ongoing": sum(1 for t in tasks if t["status"] in ("ASSIGNED", "IN_PROGRESS")),
+            "avg_task_time_s": jsround((sum(self.task_times) / len(self.task_times)) * SIM["TICK_S"]) if self.task_times else 0,
+            "on_time_rate": (self.on_time / self.completed_count) if self.completed_count else 1,
+            "avg_utilization": (sum(r["stats"]["busy_ticks"] for r in robots) / (len(robots) * tick)) if tick else 0,
+        }
+        cong = sum(z["congestion"] for z in S["zones"].values()) / max(1, len(S["zones"]))
+        K["efficiency"] = {
+            "avg_travel_distance_m": jsround(sum(r["stats"]["distance_m"] for r in robots) / max(1, self.completed_count)),
+            "avg_wait_time_s": jsround((sum(r["stats"]["wait_ticks"] for r in robots) / len(robots)) * SIM["TICK_S"]),
+            "congestion_index": jsround(cong * 100) / 100,
+            "energy_kwh": jsround(sum(r["stats"]["energy_wh"] for r in robots)) / 1000,
+        }
+        S["subsystems"]["CHARGING"] = "WARNING" if all(self.charger_busy.values()) else "NORMAL"
+        cvs = S["conveyors"].values()
+        S["subsystems"]["CONVEYORS"] = "ERROR" if any(c["status"] == "ERROR" for c in cvs) else "WARNING" if any(c["status"] != "RUNNING" for c in cvs) else "NORMAL"
+        S["subsystems"]["WAREHOUSE"] = "WARNING" if self.blocked_zones else "NORMAL"
+
+    def _push_series(self) -> None:
+        S = self.state; self.last_series_tick = S["sim"]["tick"]
+        S["kpi"]["throughput_series"].append({"tick": S["sim"]["tick"], "completed": self.completed_count, "target": jsround(S["sim"]["tick"] / 600 * 1.25)})
+        if len(S["kpi"]["throughput_series"]) > TH["THROUGHPUT_SERIES_SIZE"]:
+            S["kpi"]["throughput_series"].pop(0)
+
+    def emit(self, type_: str, source: str, severity: str, message: str, **rel: Any) -> dict[str, Any]:
+        self.event_seq += 1
+        ev = {"id": f"E{self.event_seq}", "tick": self.state["sim"]["tick"], "type": type_, "source": source, "severity": severity, "message": message}
+        for k, v in rel.items():
+            if v is not None:
+                ev[k] = v
+        self.state["recent_events"].insert(0, ev)
+        if len(self.state["recent_events"]) > SIM["EVENT_RING"]:
+            self.state["recent_events"].pop()
+        self.new_events.append(ev)
+        return ev
+
+    def _raise_alert(self, aid: str, severity: str, title: str, detail: str, **rel: Any) -> None:
+        ev = self.state["recent_events"][0] if self.state["recent_events"] else None
+        a = {"id": aid, "created_tick": self.state["sim"]["tick"], "severity": severity, "title": title, "detail": detail,
+             "source_event_id": ev["id"] if ev else "", "acknowledged": False, "resolved_tick": None}
+        for k, v in rel.items():
+            if v is not None:
+                a[k] = v
+        self.state["alerts"][aid] = a
+
+    def _resolve_alert(self, aid: str) -> None:
+        self.state["alerts"].pop(aid, None)
+
+    # ─────────────────────────────────────────────────────────
+    # 情境注入
+    # ─────────────────────────────────────────────────────────
+    def _apply_injections(self) -> None:
+        S = self.state; now = S["sim"]["tick"]; keep = []
+        for inj in self.pending_injections:
+            if inj.get("at_tick") is not None and inj["at_tick"] > now:
+                keep.append(inj); continue
+            k = inj["kind"]
+            if k == "ROBOT_FAILURE":
+                r = S["robots"].get(inj["robot_id"])
+                if r:
+                    self._set_fsm(r, "OFFLINE"); r["velocity"] = 0
+                    t = S["tasks"].get(r["current_task_id"]) if r["current_task_id"] else None
+                    if t:
+                        t["status"] = "TRANSFERRED"; t["completed_tick"] = now
+                        nt = self.create_task(t["type"], "HIGH", t["source"], t["destination"]); nt["parent_task_id"] = t["id"]
+                    r["current_task_id"] = None; r["path"] = []
+                    self.emit("ROBOT_OFFLINE", "USER", "CRITICAL", f"{r['id']} failure injected — OFFLINE", robot_id=r["id"])
+                    self._raise_alert(f"off-{r['id']}", "CRITICAL", f"{r['id']}  Offline", "Robot failure", robot_id=r["id"])
+            elif k == "ROBOT_BATTERY_SET":
+                r = S["robots"].get(inj["robot_id"])
+                if r:
+                    r["battery"] = inj["battery"]; self.rt[r["id"]].last_battery_alert = "NONE"
+            elif k == "CONVEYOR_FAILURE":
+                c = S["conveyors"].get(inj["conveyor_id"])
+                if c:
+                    c["status"] = "ERROR"; c["speed_mps"] = 0
+                    self.emit("CONVEYOR_STATUS_CHANGED", "CONVEYOR", "HIGH", f"{inj['conveyor_id']} failure — STOPPED", conveyor_id=c["id"])
+                    self._raise_alert(f"cv-{c['id']}", "HIGH", f"Conveyor {c['id']}  Error", "Throughput impact: HIGH", conveyor_id=c["id"])
+            elif k == "CAMERA_OFFLINE":
+                c = S["cameras"].get(inj["camera_id"])
+                if c:
+                    c["status"] = "OFFLINE"; S["subsystems"]["CCTV"] = "WARNING"
+                    self.emit("CAMERA_STATUS_CHANGED", "CAMERA", "MEDIUM", f"{c['id']} offline", camera_id=c["id"])
+            elif k == "HUMAN_INTRUSION":
+                zid = inj["zone_id"]; b = self._zone_bounds.get(zid)
+                if b:
+                    x0, z0, x1, z1 = b
+                    pid = f"H-{zid}-{now}"
+                    S["people"][pid] = {"id": pid, "kind": "WORKER", "position": [(x0 + x1) / 2, 0, z0 + 6.3], "heading": 0, "zone": zid, "expires_tick": now + inj["duration_ticks"]}
+                    self.blocked_zones.add(zid); S["zones"][zid]["blocked_reason"] = "Human detected"; S["zones"][zid]["blocked_since_tick"] = now
+                    self.emit("HUMAN_DETECTED", "VLM", "HIGH", f"Human detected — Zone {zid}", zone_id=zid)
+                    self.emit("ZONE_BLOCKED", "SIMULATION", "HIGH", f"Zone {zid} marked BLOCKED", zone_id=zid)
+                    self._raise_alert(f"zone-{zid}", "HIGH", f"Zone {zid}  Human Detected", "Route blocked", zone_id=zid)
+                    for r in S["robots"].values():
+                        if r["path"] and any(x0 <= c[0] < x1 and z0 <= c[1] < z1 for c in r["path"][r["path_index"]:]):
+                            self._set_fsm(r, "OBSTACLE_DETECTED")
+            elif k == "TRAFFIC_CONGESTION":
+                zid = inj["zone_id"]
+                self.congested_zones[zid] = {"level": inj["level"], "until": now + inj["duration_ticks"]}
+                self.emit("ZONE_CONGESTION_HIGH", "USER", "MEDIUM", f"Traffic congestion injected — Zone {zid} (level {jsround(inj['level'] * 100)}%)", zone_id=zid)
+                self._raise_alert(f"traffic-{zid}", "MEDIUM", f"Zone {zid}  Traffic Delay", f"Speed limited to {jsround((1 - 0.7 * inj['level']) * 100)}%", zone_id=zid)
+                for r in S["robots"].values():
+                    if len(r["path"]) > r["path_index"] + 3 and r["fsm"] != "IDLE": self._set_fsm(r, "OBSTACLE_DETECTED")
+            elif k == "TASK_BURST":
+                for _ in range(inj["count"]):
+                    self.next_task_tick = now; self._generate_tasks()
+        self.pending_injections = keep
+        for zid in [z for z, cz in self.congested_zones.items() if now >= cz["until"]]:
+            del self.congested_zones[zid]; self._resolve_alert(f"traffic-{zid}")
+            self.emit("ZONE_UNBLOCKED", "SIMULATION", "INFO", f"Zone {zid} traffic back to normal", zone_id=zid)
+        for pid in list(S["people"].keys()):
+            p = S["people"][pid]
+            if p["expires_tick"] is not None and now >= p["expires_tick"]:
+                del S["people"][pid]
+                z = p["zone"]
+                if z and not any(q["zone"] == z for q in S["people"].values()):
+                    self.blocked_zones.discard(z); S["zones"][z]["blocked_reason"] = None; S["zones"][z]["blocked_since_tick"] = None
+                    self._resolve_alert(f"zone-{z}")
+                    self.emit("HUMAN_CLEARED", "VLM", "INFO", f"Zone {z} clear", zone_id=z)
+                    self.emit("ZONE_UNBLOCKED", "SIMULATION", "INFO", f"Zone {z} unblocked", zone_id=z)
+
+    def pretty(self, loc_id: str) -> str:
+        l = self.loc.get(loc_id)
+        if not l: return loc_id
+        k = l["kind"]
+        if k == "SHELF": return "Shelf " + loc_id.replace("SHELF-", "")
+        if k == "PACKING": return loc_id.replace("PACK-", "Packing ")
+        if k == "SORTING": return "Sorting"
+        if k == "CHARGING": return loc_id.replace("CHG-", "Charger ")
+        return loc_id.replace("-", " ", 1)

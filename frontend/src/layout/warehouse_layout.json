@@ -1,0 +1,8447 @@
+{
+  "schema_version": "1.0",
+  "id": "wh-main-v1",
+  "name": "Main Warehouse (100x70m)",
+  "units": "m",
+  "size": {
+    "width": 100,
+    "depth": 70,
+    "height": 12
+  },
+  "grid": {
+    "cell_size": 1.0,
+    "cols": 100,
+    "rows": 70
+  },
+  "zones": [
+    {
+      "id": "A",
+      "name": "Zone A",
+      "color": "#3b82f6",
+      "polygon": [
+        [
+          4,
+          10
+        ],
+        [
+          46,
+          10
+        ],
+        [
+          46,
+          32
+        ],
+        [
+          4,
+          32
+        ]
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Zone B",
+      "color": "#a855f7",
+      "polygon": [
+        [
+          54,
+          10
+        ],
+        [
+          96,
+          10
+        ],
+        [
+          96,
+          32
+        ],
+        [
+          54,
+          32
+        ]
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Zone C",
+      "color": "#22c55e",
+      "polygon": [
+        [
+          4,
+          38
+        ],
+        [
+          46,
+          38
+        ],
+        [
+          46,
+          62
+        ],
+        [
+          4,
+          62
+        ]
+      ]
+    },
+    {
+      "id": "D",
+      "name": "Zone D",
+      "color": "#f59e0b",
+      "polygon": [
+        [
+          54,
+          38
+        ],
+        [
+          96,
+          38
+        ],
+        [
+          96,
+          62
+        ],
+        [
+          54,
+          62
+        ]
+      ]
+    }
+  ],
+  "docks": [
+    {
+      "id": "INBOUND-1",
+      "kind": "INBOUND",
+      "zone": "A",
+      "rect": [
+        20,
+        0,
+        32,
+        8
+      ],
+      "door": [
+        26,
+        0
+      ]
+    },
+    {
+      "id": "INBOUND-2",
+      "kind": "INBOUND",
+      "zone": "A",
+      "rect": [
+        34,
+        0,
+        46,
+        8
+      ],
+      "door": [
+        40,
+        0
+      ]
+    },
+    {
+      "id": "OUTBOUND-1",
+      "kind": "OUTBOUND",
+      "zone": "B",
+      "rect": [
+        54,
+        0,
+        66,
+        8
+      ],
+      "door": [
+        60,
+        0
+      ]
+    },
+    {
+      "id": "OUTBOUND-2",
+      "kind": "OUTBOUND",
+      "zone": "B",
+      "rect": [
+        68,
+        0,
+        80,
+        8
+      ],
+      "door": [
+        74,
+        0
+      ]
+    }
+  ],
+  "racks": [
+    {
+      "id": "RACK-A101",
+      "zone": "A",
+      "position": [
+        6.0,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A102",
+      "zone": "A",
+      "position": [
+        9.6,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A103",
+      "zone": "A",
+      "position": [
+        13.2,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A104",
+      "zone": "A",
+      "position": [
+        16.8,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A105",
+      "zone": "A",
+      "position": [
+        20.4,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A106",
+      "zone": "A",
+      "position": [
+        24.0,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A107",
+      "zone": "A",
+      "position": [
+        27.6,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A108",
+      "zone": "A",
+      "position": [
+        31.2,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A109",
+      "zone": "A",
+      "position": [
+        34.8,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A110",
+      "zone": "A",
+      "position": [
+        38.4,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A201",
+      "zone": "A",
+      "position": [
+        6.0,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A202",
+      "zone": "A",
+      "position": [
+        9.6,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A203",
+      "zone": "A",
+      "position": [
+        13.2,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A204",
+      "zone": "A",
+      "position": [
+        16.8,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A205",
+      "zone": "A",
+      "position": [
+        20.4,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A206",
+      "zone": "A",
+      "position": [
+        24.0,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A207",
+      "zone": "A",
+      "position": [
+        27.6,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A208",
+      "zone": "A",
+      "position": [
+        31.2,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A209",
+      "zone": "A",
+      "position": [
+        34.8,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A210",
+      "zone": "A",
+      "position": [
+        38.4,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A301",
+      "zone": "A",
+      "position": [
+        6.0,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A302",
+      "zone": "A",
+      "position": [
+        9.6,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A303",
+      "zone": "A",
+      "position": [
+        13.2,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A304",
+      "zone": "A",
+      "position": [
+        16.8,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A305",
+      "zone": "A",
+      "position": [
+        20.4,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A306",
+      "zone": "A",
+      "position": [
+        24.0,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A307",
+      "zone": "A",
+      "position": [
+        27.6,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A308",
+      "zone": "A",
+      "position": [
+        31.2,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A309",
+      "zone": "A",
+      "position": [
+        34.8,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A310",
+      "zone": "A",
+      "position": [
+        38.4,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A401",
+      "zone": "A",
+      "position": [
+        6.0,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A402",
+      "zone": "A",
+      "position": [
+        9.6,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A403",
+      "zone": "A",
+      "position": [
+        13.2,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A404",
+      "zone": "A",
+      "position": [
+        16.8,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A405",
+      "zone": "A",
+      "position": [
+        20.4,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A406",
+      "zone": "A",
+      "position": [
+        24.0,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A407",
+      "zone": "A",
+      "position": [
+        27.6,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A408",
+      "zone": "A",
+      "position": [
+        31.2,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A409",
+      "zone": "A",
+      "position": [
+        34.8,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-A410",
+      "zone": "A",
+      "position": [
+        38.4,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B101",
+      "zone": "B",
+      "position": [
+        56.0,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B102",
+      "zone": "B",
+      "position": [
+        59.6,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B103",
+      "zone": "B",
+      "position": [
+        63.2,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B104",
+      "zone": "B",
+      "position": [
+        66.8,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B105",
+      "zone": "B",
+      "position": [
+        70.4,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B106",
+      "zone": "B",
+      "position": [
+        74.0,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B107",
+      "zone": "B",
+      "position": [
+        77.6,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B108",
+      "zone": "B",
+      "position": [
+        81.2,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B109",
+      "zone": "B",
+      "position": [
+        84.8,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B110",
+      "zone": "B",
+      "position": [
+        88.4,
+        0,
+        13.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B201",
+      "zone": "B",
+      "position": [
+        56.0,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B202",
+      "zone": "B",
+      "position": [
+        59.6,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B203",
+      "zone": "B",
+      "position": [
+        63.2,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B204",
+      "zone": "B",
+      "position": [
+        66.8,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B205",
+      "zone": "B",
+      "position": [
+        70.4,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B206",
+      "zone": "B",
+      "position": [
+        74.0,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B207",
+      "zone": "B",
+      "position": [
+        77.6,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B208",
+      "zone": "B",
+      "position": [
+        81.2,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B209",
+      "zone": "B",
+      "position": [
+        84.8,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B210",
+      "zone": "B",
+      "position": [
+        88.4,
+        0,
+        18.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B301",
+      "zone": "B",
+      "position": [
+        56.0,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B302",
+      "zone": "B",
+      "position": [
+        59.6,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B303",
+      "zone": "B",
+      "position": [
+        63.2,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B304",
+      "zone": "B",
+      "position": [
+        66.8,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B305",
+      "zone": "B",
+      "position": [
+        70.4,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B306",
+      "zone": "B",
+      "position": [
+        74.0,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B307",
+      "zone": "B",
+      "position": [
+        77.6,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B308",
+      "zone": "B",
+      "position": [
+        81.2,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B309",
+      "zone": "B",
+      "position": [
+        84.8,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B310",
+      "zone": "B",
+      "position": [
+        88.4,
+        0,
+        23.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B401",
+      "zone": "B",
+      "position": [
+        56.0,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B402",
+      "zone": "B",
+      "position": [
+        59.6,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B403",
+      "zone": "B",
+      "position": [
+        63.2,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B404",
+      "zone": "B",
+      "position": [
+        66.8,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B405",
+      "zone": "B",
+      "position": [
+        70.4,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B406",
+      "zone": "B",
+      "position": [
+        74.0,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B407",
+      "zone": "B",
+      "position": [
+        77.6,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B408",
+      "zone": "B",
+      "position": [
+        81.2,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B409",
+      "zone": "B",
+      "position": [
+        84.8,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-B410",
+      "zone": "B",
+      "position": [
+        88.4,
+        0,
+        28.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C101",
+      "zone": "C",
+      "position": [
+        6.0,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C102",
+      "zone": "C",
+      "position": [
+        9.6,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C103",
+      "zone": "C",
+      "position": [
+        13.2,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C104",
+      "zone": "C",
+      "position": [
+        16.8,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C105",
+      "zone": "C",
+      "position": [
+        20.4,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C106",
+      "zone": "C",
+      "position": [
+        24.0,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C107",
+      "zone": "C",
+      "position": [
+        27.6,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C108",
+      "zone": "C",
+      "position": [
+        31.2,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C109",
+      "zone": "C",
+      "position": [
+        34.8,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C110",
+      "zone": "C",
+      "position": [
+        38.4,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C201",
+      "zone": "C",
+      "position": [
+        6.0,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C202",
+      "zone": "C",
+      "position": [
+        9.6,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C203",
+      "zone": "C",
+      "position": [
+        13.2,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C204",
+      "zone": "C",
+      "position": [
+        16.8,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C205",
+      "zone": "C",
+      "position": [
+        20.4,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C206",
+      "zone": "C",
+      "position": [
+        24.0,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C207",
+      "zone": "C",
+      "position": [
+        27.6,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C208",
+      "zone": "C",
+      "position": [
+        31.2,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C209",
+      "zone": "C",
+      "position": [
+        34.8,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C210",
+      "zone": "C",
+      "position": [
+        38.4,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C301",
+      "zone": "C",
+      "position": [
+        6.0,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C302",
+      "zone": "C",
+      "position": [
+        9.6,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C303",
+      "zone": "C",
+      "position": [
+        13.2,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C304",
+      "zone": "C",
+      "position": [
+        16.8,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C305",
+      "zone": "C",
+      "position": [
+        20.4,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C306",
+      "zone": "C",
+      "position": [
+        24.0,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C307",
+      "zone": "C",
+      "position": [
+        27.6,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C308",
+      "zone": "C",
+      "position": [
+        31.2,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C309",
+      "zone": "C",
+      "position": [
+        34.8,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C310",
+      "zone": "C",
+      "position": [
+        38.4,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C401",
+      "zone": "C",
+      "position": [
+        6.0,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C402",
+      "zone": "C",
+      "position": [
+        9.6,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C403",
+      "zone": "C",
+      "position": [
+        13.2,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C404",
+      "zone": "C",
+      "position": [
+        16.8,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C405",
+      "zone": "C",
+      "position": [
+        20.4,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C406",
+      "zone": "C",
+      "position": [
+        24.0,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C407",
+      "zone": "C",
+      "position": [
+        27.6,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C408",
+      "zone": "C",
+      "position": [
+        31.2,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C409",
+      "zone": "C",
+      "position": [
+        34.8,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-C410",
+      "zone": "C",
+      "position": [
+        38.4,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D101",
+      "zone": "D",
+      "position": [
+        56.0,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D102",
+      "zone": "D",
+      "position": [
+        59.6,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D103",
+      "zone": "D",
+      "position": [
+        63.2,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D104",
+      "zone": "D",
+      "position": [
+        66.8,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D105",
+      "zone": "D",
+      "position": [
+        70.4,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D106",
+      "zone": "D",
+      "position": [
+        74.0,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D107",
+      "zone": "D",
+      "position": [
+        77.6,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D108",
+      "zone": "D",
+      "position": [
+        81.2,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D109",
+      "zone": "D",
+      "position": [
+        84.8,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D110",
+      "zone": "D",
+      "position": [
+        88.4,
+        0,
+        41.0
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D201",
+      "zone": "D",
+      "position": [
+        56.0,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D202",
+      "zone": "D",
+      "position": [
+        59.6,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D203",
+      "zone": "D",
+      "position": [
+        63.2,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D204",
+      "zone": "D",
+      "position": [
+        66.8,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D205",
+      "zone": "D",
+      "position": [
+        70.4,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D206",
+      "zone": "D",
+      "position": [
+        74.0,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D207",
+      "zone": "D",
+      "position": [
+        77.6,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D208",
+      "zone": "D",
+      "position": [
+        81.2,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D209",
+      "zone": "D",
+      "position": [
+        84.8,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D210",
+      "zone": "D",
+      "position": [
+        88.4,
+        0,
+        46.2
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D301",
+      "zone": "D",
+      "position": [
+        56.0,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D302",
+      "zone": "D",
+      "position": [
+        59.6,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D303",
+      "zone": "D",
+      "position": [
+        63.2,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D304",
+      "zone": "D",
+      "position": [
+        66.8,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D305",
+      "zone": "D",
+      "position": [
+        70.4,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D306",
+      "zone": "D",
+      "position": [
+        74.0,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D307",
+      "zone": "D",
+      "position": [
+        77.6,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D308",
+      "zone": "D",
+      "position": [
+        81.2,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D309",
+      "zone": "D",
+      "position": [
+        84.8,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D310",
+      "zone": "D",
+      "position": [
+        88.4,
+        0,
+        51.4
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D401",
+      "zone": "D",
+      "position": [
+        56.0,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D402",
+      "zone": "D",
+      "position": [
+        59.6,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D403",
+      "zone": "D",
+      "position": [
+        63.2,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D404",
+      "zone": "D",
+      "position": [
+        66.8,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D405",
+      "zone": "D",
+      "position": [
+        70.4,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D406",
+      "zone": "D",
+      "position": [
+        74.0,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D407",
+      "zone": "D",
+      "position": [
+        77.6,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D408",
+      "zone": "D",
+      "position": [
+        81.2,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D409",
+      "zone": "D",
+      "position": [
+        84.8,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    },
+    {
+      "id": "RACK-D410",
+      "zone": "D",
+      "position": [
+        88.4,
+        0,
+        56.6
+      ],
+      "size": [
+        3.0,
+        6.0,
+        1.2
+      ],
+      "rotation": 0,
+      "levels": 4,
+      "model": "rack_double",
+      "blocks_grid": true
+    }
+  ],
+  "conveyors": [
+    {
+      "id": "CV01",
+      "name": "Conveyor #01",
+      "zone": "A",
+      "path": [
+        [
+          10,
+          35
+        ],
+        [
+          46,
+          35
+        ]
+      ],
+      "width": 1.0,
+      "speed_mps": 0.6,
+      "direction": "FORWARD",
+      "blocks_grid": true,
+      "feeds": "PACK-02"
+    },
+    {
+      "id": "CV02",
+      "name": "Conveyor #02",
+      "zone": "B",
+      "path": [
+        [
+          54,
+          35
+        ],
+        [
+          97.5,
+          35
+        ]
+      ],
+      "width": 1.0,
+      "speed_mps": 0.6,
+      "direction": "FORWARD",
+      "blocks_grid": true,
+      "feeds": "SORT-01"
+    },
+    {
+      "id": "CV03",
+      "name": "Conveyor #03",
+      "zone": "D",
+      "path": [
+        [
+          97.5,
+          35
+        ],
+        [
+          97.5,
+          60
+        ]
+      ],
+      "width": 1.0,
+      "speed_mps": 0.6,
+      "direction": "FORWARD",
+      "blocks_grid": true,
+      "feeds": "PACK-01"
+    }
+  ],
+  "stations": [
+    {
+      "id": "PACK-01",
+      "kind": "PACKING",
+      "zone": "D",
+      "rect": [
+        82,
+        62,
+        96,
+        68
+      ],
+      "access_point": [
+        89,
+        61
+      ]
+    },
+    {
+      "id": "PACK-02",
+      "kind": "PACKING",
+      "zone": "C",
+      "rect": [
+        4,
+        62,
+        18,
+        68
+      ],
+      "access_point": [
+        11,
+        61
+      ]
+    },
+    {
+      "id": "SORT-01",
+      "kind": "SORTING",
+      "zone": "B",
+      "rect": [
+        82,
+        0,
+        96,
+        8
+      ],
+      "access_point": [
+        89,
+        9
+      ]
+    }
+  ],
+  "charging_stations": [
+    {
+      "id": "CHG-01",
+      "zone": "C",
+      "position": [
+        22.0,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        22.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-02",
+      "zone": "C",
+      "position": [
+        24.5,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        24.5,
+        65
+      ]
+    },
+    {
+      "id": "CHG-03",
+      "zone": "C",
+      "position": [
+        27.0,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        27.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-04",
+      "zone": "C",
+      "position": [
+        29.5,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        29.5,
+        65
+      ]
+    },
+    {
+      "id": "CHG-05",
+      "zone": "C",
+      "position": [
+        32.0,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        32.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-06",
+      "zone": "C",
+      "position": [
+        34.5,
+        0,
+        66
+      ],
+      "heading": 3.14159,
+      "power_kw": 3.0,
+      "access_point": [
+        34.5,
+        65
+      ]
+    }
+  ],
+  "parking": [
+    {
+      "id": "PARK-1",
+      "zone": "C",
+      "rect": [
+        40,
+        63,
+        60,
+        68
+      ],
+      "slots": 10
+    }
+  ],
+  "restricted_areas": [
+    {
+      "id": "RESTRICT-1",
+      "name": "Maintenance bay",
+      "rect": [
+        0,
+        0,
+        18,
+        8
+      ],
+      "robots_allowed": false
+    }
+  ],
+  "walkways": [
+    {
+      "id": "WALK-1",
+      "polygon": [
+        [
+          0,
+          8
+        ],
+        [
+          100,
+          8
+        ],
+        [
+          100,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "robots_allowed": true,
+      "speed_limit_mps": 0.8
+    },
+    {
+      "id": "WALK-2",
+      "polygon": [
+        [
+          46,
+          10
+        ],
+        [
+          54,
+          10
+        ],
+        [
+          54,
+          62
+        ],
+        [
+          46,
+          62
+        ]
+      ],
+      "robots_allowed": true,
+      "speed_limit_mps": 1.0
+    }
+  ],
+  "cameras": [
+    {
+      "id": "CAM-A01",
+      "zone": "A",
+      "position": [
+        4.6,
+        4.5,
+        16.3
+      ],
+      "look_at": [
+        22.6,
+        0.5,
+        16.3
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-A02",
+      "zone": "A",
+      "position": [
+        45.4,
+        4.5,
+        21.5
+      ],
+      "look_at": [
+        27.4,
+        0.5,
+        21.5
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-A03",
+      "zone": "A",
+      "position": [
+        4.6,
+        4.5,
+        26.7
+      ],
+      "look_at": [
+        22.6,
+        0.5,
+        26.7
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-B01",
+      "zone": "B",
+      "position": [
+        54.6,
+        4.5,
+        16.3
+      ],
+      "look_at": [
+        72.6,
+        0.5,
+        16.3
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-B02",
+      "zone": "B",
+      "position": [
+        95.4,
+        4.5,
+        21.5
+      ],
+      "look_at": [
+        77.4,
+        0.5,
+        21.5
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-B03",
+      "zone": "B",
+      "position": [
+        54.6,
+        4.5,
+        26.7
+      ],
+      "look_at": [
+        72.6,
+        0.5,
+        26.7
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-C01",
+      "zone": "C",
+      "position": [
+        4.6,
+        4.5,
+        44.3
+      ],
+      "look_at": [
+        22.6,
+        0.5,
+        44.3
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-C02",
+      "zone": "C",
+      "position": [
+        45.4,
+        4.5,
+        49.5
+      ],
+      "look_at": [
+        27.4,
+        0.5,
+        49.5
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-C03",
+      "zone": "C",
+      "position": [
+        4.6,
+        4.5,
+        54.7
+      ],
+      "look_at": [
+        22.6,
+        0.5,
+        54.7
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-D01",
+      "zone": "D",
+      "position": [
+        54.6,
+        4.5,
+        44.3
+      ],
+      "look_at": [
+        72.6,
+        0.5,
+        44.3
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-D02",
+      "zone": "D",
+      "position": [
+        95.4,
+        4.5,
+        49.5
+      ],
+      "look_at": [
+        77.4,
+        0.5,
+        49.5
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-D03",
+      "zone": "D",
+      "position": [
+        54.6,
+        4.5,
+        54.7
+      ],
+      "look_at": [
+        72.6,
+        0.5,
+        54.7
+      ],
+      "fov_deg": 65,
+      "range_m": 30
+    },
+    {
+      "id": "CAM-DOCK-IN",
+      "zone": "A",
+      "position": [
+        33,
+        6,
+        2
+      ],
+      "look_at": [
+        33,
+        0,
+        12
+      ],
+      "fov_deg": 80,
+      "range_m": 20
+    },
+    {
+      "id": "CAM-DOCK-OUT",
+      "zone": "B",
+      "position": [
+        67,
+        6,
+        2
+      ],
+      "look_at": [
+        67,
+        0,
+        12
+      ],
+      "fov_deg": 80,
+      "range_m": 20
+    }
+  ],
+  "sensors": [
+    {
+      "id": "S-A01",
+      "kind": "PRESENCE",
+      "zone": "A",
+      "position": [
+        26,
+        1,
+        9
+      ]
+    },
+    {
+      "id": "S-B01",
+      "kind": "PRESENCE",
+      "zone": "B",
+      "position": [
+        74,
+        1,
+        9
+      ]
+    },
+    {
+      "id": "S-C01",
+      "kind": "LIDAR",
+      "zone": "C",
+      "position": [
+        50,
+        1,
+        50
+      ]
+    },
+    {
+      "id": "S-D01",
+      "kind": "LIDAR",
+      "zone": "D",
+      "position": [
+        50,
+        1,
+        20
+      ]
+    },
+    {
+      "id": "S-CV03",
+      "kind": "WEIGHT",
+      "zone": "D",
+      "position": [
+        97.5,
+        0.5,
+        48
+      ]
+    },
+    {
+      "id": "S-T01",
+      "kind": "TEMP",
+      "zone": "A",
+      "position": [
+        5,
+        3,
+        12
+      ]
+    }
+  ],
+  "locations": [
+    {
+      "id": "SHELF-A01",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A02",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A03",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A04",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A05",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A06",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A07",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A08",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A09",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A10",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A11",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A12",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A13",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A14",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A15",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A16",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A17",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A18",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A19",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-A20",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-A21",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A22",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A23",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A24",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A25",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A26",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A27",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A28",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A29",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A30",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A31",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A32",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A33",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A34",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A35",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A36",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A37",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A38",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A39",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-A40",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-A41",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A42",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A43",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A44",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A45",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A46",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A47",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A48",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A49",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A50",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A51",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A52",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A53",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A54",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A55",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A56",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A57",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A58",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A59",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-A60",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-A61",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A62",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A63",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A64",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A65",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A66",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A67",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A68",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A69",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A70",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A71",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A72",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A73",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A74",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A75",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A76",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A77",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A78",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-A79",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-A80",
+      "kind": "SHELF",
+      "zone": "A",
+      "rack_id": "RACK-A410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B01",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B02",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B03",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B04",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B05",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B06",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B07",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B08",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B09",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B10",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B11",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B12",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B13",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B14",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B15",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B16",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B17",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B18",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B19",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        12.0
+      ]
+    },
+    {
+      "id": "SHELF-B20",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        15.2
+      ]
+    },
+    {
+      "id": "SHELF-B21",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B22",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B23",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B24",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B25",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B26",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B27",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B28",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B29",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B30",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B31",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B32",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B33",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B34",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B35",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B36",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B37",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B38",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B39",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        17.2
+      ]
+    },
+    {
+      "id": "SHELF-B40",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        20.4
+      ]
+    },
+    {
+      "id": "SHELF-B41",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B42",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B43",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B44",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B45",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B46",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B47",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B48",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B49",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B50",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B51",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B52",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B53",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B54",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B55",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B56",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B57",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B58",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B59",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        22.4
+      ]
+    },
+    {
+      "id": "SHELF-B60",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        25.6
+      ]
+    },
+    {
+      "id": "SHELF-B61",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B62",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B63",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B64",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B65",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B66",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B67",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B68",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B69",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B70",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B71",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B72",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B73",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B74",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B75",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B76",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B77",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B78",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-B79",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        27.6
+      ]
+    },
+    {
+      "id": "SHELF-B80",
+      "kind": "SHELF",
+      "zone": "B",
+      "rack_id": "RACK-B410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        30.8
+      ]
+    },
+    {
+      "id": "SHELF-C01",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C02",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C03",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C04",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C05",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C06",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C07",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C08",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C09",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C10",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C11",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C12",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C13",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C14",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C15",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C16",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C17",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C18",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C19",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-C20",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-C21",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C22",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C23",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C24",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C25",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C26",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C27",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C28",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C29",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C30",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C31",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C32",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C33",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C34",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C35",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C36",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C37",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C38",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C39",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-C40",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-C41",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C42",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C43",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C44",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C45",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C46",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C47",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C48",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C49",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C50",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C51",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C52",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C53",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C54",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C55",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C56",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C57",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C58",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C59",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-C60",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-C61",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C62",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        7.5,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C63",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C64",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        11.1,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C65",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C66",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        14.7,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C67",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C68",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        18.3,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C69",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C70",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        21.9,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C71",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C72",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        25.5,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C73",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C74",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        29.1,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C75",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C76",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        32.7,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C77",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C78",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        36.3,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-C79",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-C80",
+      "kind": "SHELF",
+      "zone": "C",
+      "rack_id": "RACK-C410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        39.9,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D01",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D02",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D101",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D03",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D04",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D102",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D05",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D06",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D103",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D07",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D08",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D104",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D09",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D10",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D105",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D11",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D12",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D106",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D13",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D14",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D107",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D15",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D16",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D108",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D17",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D18",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D109",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D19",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        40.0
+      ]
+    },
+    {
+      "id": "SHELF-D20",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D110",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        43.2
+      ]
+    },
+    {
+      "id": "SHELF-D21",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D22",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D201",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D23",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D24",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D202",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D25",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D26",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D203",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D27",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D28",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D204",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D29",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D30",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D205",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D31",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D32",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D206",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D33",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D34",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D207",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D35",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D36",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D208",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D37",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D38",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D209",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D39",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        45.2
+      ]
+    },
+    {
+      "id": "SHELF-D40",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D210",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        48.4
+      ]
+    },
+    {
+      "id": "SHELF-D41",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D42",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D301",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D43",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D44",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D302",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D45",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D46",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D303",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D47",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D48",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D304",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D49",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D50",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D305",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D51",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D52",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D306",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D53",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D54",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D307",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D55",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D56",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D308",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D57",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D58",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D309",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D59",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        50.4
+      ]
+    },
+    {
+      "id": "SHELF-D60",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D310",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        53.6
+      ]
+    },
+    {
+      "id": "SHELF-D61",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D62",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D401",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        57.5,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D63",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D64",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D402",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        61.1,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D65",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D66",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D403",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        64.7,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D67",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D68",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D404",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        68.3,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D69",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D70",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D405",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        71.9,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D71",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D72",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D406",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        75.5,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D73",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D74",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D407",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        79.1,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D75",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D76",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D408",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        82.7,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D77",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D78",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D409",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        86.3,
+        58.8
+      ]
+    },
+    {
+      "id": "SHELF-D79",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        55.6
+      ]
+    },
+    {
+      "id": "SHELF-D80",
+      "kind": "SHELF",
+      "zone": "D",
+      "rack_id": "RACK-D410",
+      "level_range": [
+        1,
+        4
+      ],
+      "access_point": [
+        89.9,
+        58.8
+      ]
+    },
+    {
+      "id": "PACK-01",
+      "kind": "PACKING",
+      "zone": "D",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        89,
+        61
+      ]
+    },
+    {
+      "id": "PACK-02",
+      "kind": "PACKING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        11,
+        61
+      ]
+    },
+    {
+      "id": "SORT-01",
+      "kind": "SORTING",
+      "zone": "B",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        89,
+        9
+      ]
+    },
+    {
+      "id": "INBOUND-1",
+      "kind": "INBOUND",
+      "zone": "A",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        26.0,
+        9
+      ]
+    },
+    {
+      "id": "INBOUND-2",
+      "kind": "INBOUND",
+      "zone": "A",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        40.0,
+        9
+      ]
+    },
+    {
+      "id": "OUTBOUND-1",
+      "kind": "OUTBOUND",
+      "zone": "B",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        60.0,
+        9
+      ]
+    },
+    {
+      "id": "OUTBOUND-2",
+      "kind": "OUTBOUND",
+      "zone": "B",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        74.0,
+        9
+      ]
+    },
+    {
+      "id": "CHG-01",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        22.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-02",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        24.5,
+        65
+      ]
+    },
+    {
+      "id": "CHG-03",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        27.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-04",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        29.5,
+        65
+      ]
+    },
+    {
+      "id": "CHG-05",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        32.0,
+        65
+      ]
+    },
+    {
+      "id": "CHG-06",
+      "kind": "CHARGING",
+      "zone": "C",
+      "rack_id": null,
+      "level_range": null,
+      "access_point": [
+        34.5,
+        65
+      ]
+    }
+  ],
+  "obstacles": [],
+  "spawn": {
+    "robots": [
+      {
+        "id": "R01",
+        "position": [
+          40.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 70
+      },
+      {
+        "id": "R02",
+        "position": [
+          42.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 77
+      },
+      {
+        "id": "R03",
+        "position": [
+          44.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 84
+      },
+      {
+        "id": "R04",
+        "position": [
+          46.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 91
+      },
+      {
+        "id": "R05",
+        "position": [
+          48.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 98
+      },
+      {
+        "id": "R06",
+        "position": [
+          50.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 75
+      },
+      {
+        "id": "R07",
+        "position": [
+          52.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 82
+      },
+      {
+        "id": "R08",
+        "position": [
+          54.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 89
+      },
+      {
+        "id": "R09",
+        "position": [
+          56.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 96
+      },
+      {
+        "id": "R10",
+        "position": [
+          58.0,
+          0,
+          64.0
+        ],
+        "heading": -1.5708,
+        "battery": 73
+      },
+      {
+        "id": "R11",
+        "position": [
+          40.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 80
+      },
+      {
+        "id": "R12",
+        "position": [
+          42.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 87
+      },
+      {
+        "id": "R13",
+        "position": [
+          44.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 94
+      },
+      {
+        "id": "R14",
+        "position": [
+          46.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 71
+      },
+      {
+        "id": "R15",
+        "position": [
+          48.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 78
+      },
+      {
+        "id": "R16",
+        "position": [
+          50.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 85
+      },
+      {
+        "id": "R17",
+        "position": [
+          52.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 92
+      },
+      {
+        "id": "R18",
+        "position": [
+          54.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 99
+      },
+      {
+        "id": "R19",
+        "position": [
+          56.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 76
+      },
+      {
+        "id": "R20",
+        "position": [
+          58.0,
+          0,
+          66.0
+        ],
+        "heading": -1.5708,
+        "battery": 83
+      }
+    ]
+  }
+}

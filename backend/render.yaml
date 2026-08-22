@@ -1,0 +1,21 @@
+# Render Blueprint — 在 Render 點 "New → Blueprint" 指向這個 repo 即可
+services:
+  - type: web
+    name: warehouse-twin-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: TWIN_SEED
+        value: "42"
+      - key: TWIN_DB
+        value: /tmp/twin.db
+      - key: TWIN_CORS_ORIGINS
+        value: http://localhost:5173          # 部署後改成你的 Vercel 網域，多個用逗號分隔
+      - key: TWIN_CORS_REGEX
+        value: https://.*\.vercel\.app        # 讓 Vercel 的 preview 網域也能連

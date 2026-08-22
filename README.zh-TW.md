@@ -1,0 +1,123 @@
+<div align="center">
+
+<img src="docs/logo.svg" width="96" alt="WareTwin logo" />
+
+# WareTwin
+
+**AI 自主倉儲數位分身**
+
+*在真實部署之前，於瀏覽器中模擬自主機器人車隊、營運事件、AI 決策與 What-if 情境。*
+
+[![CI](https://img.shields.io/github/actions/workflow/status/WayneChou-bot/WareTwin/ci.yml?branch=main&label=CI&logo=github)](../../actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)](https://react.dev)
+[![Three.js](https://img.shields.io/badge/Three.js-R3F-000?logo=three.js&logoColor=white)](https://docs.pmnd.rs/react-three-fiber)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)](https://python.org)
+
+[**線上 Demo**](https://waretwin.vercel.app) · [Demo 腳本](docs/DEMO.md) · [架構](#-架構) · [English](README.md)
+
+<img src="docs/demo.gif" width="880" alt="WareTwin demo" />
+
+</div>
+
+---
+
+## ✨ 這是什麼
+
+WareTwin 是一個 100 × 70 m 倉庫的即時 **3D 數位分身**：20 台自主移動機器人（AMR）、四個 Zone、輸送帶、包裝站、充電樁與虛擬 CCTV。確定性的模擬引擎驅動每台機器人走完整的狀態機（取貨 → 運送 → 卸貨、低電量交接、遇障重新規劃）；Fleet Manager 以**可解釋的評分**指派任務；AI 層讀同一份狀態來**解釋、感知與預測**。
+
+在內顯筆電上就能跑——不需要 RTX、ROS 或雲端。
+
+| | |
+|---|---|
+| 🏭 **3D 數位分身** | 由單一 `warehouse_layout.json` 產生的 React Three Fiber 場景：instanced 貨架、帶即時 A* 路徑的 AMR、Zone 覆蓋層、虛擬 CCTV、地圖／交通／熱圖視角。內顯用的品質分級。 |
+| 🤖 **機器人車隊模擬** | 100 ms tick 的確定性引擎：FSM、交通加權格點上的 8 方向 A*、格點預約與死鎖解除、電池模型與充電排程、會真的造成瓶頸的輸送帶。 |
+| 🧠 **可解釋的 Fleet Manager** | 每次指派都列出選中機器人的理由（距離、電量、負載、擁塞、健康）以及每個落選者為什麼輸。 |
+| ⚡ **情境注入** | 機器人故障、低電量、輸送帶停機、人員闖入（封鎖 Zone + 改道）、交通擁塞、攝影機離線、需求爆量——一鍵注入、皆可解除。 |
+| 🔮 **What-if 模擬** | 複製當下的 Twin、注入、跑 1–10 分鐘，以同一個亂數種子的 Baseline 比較 12 項指標。LIVE 完全不受影響。 |
+| 💬 **AI 營運 Copilot** | 問「Why is throughput dropping?」——答案來自即時狀態並引用可點擊的機器人／任務／事件。LLM 可選（見 [AI 模式](#-ai-模式)）。 |
+| 👁️ **VLM 感知** | 把虛擬 CCTV 畫面送給視覺模型 → `{event, severity, bbox, confidence}` 疊在畫面上。 |
+| 🔌 **即時同步** | FastAPI + WebSocket：一次 `FULL`，之後每 tick `PATCH` 差異（約 12 KB/s）。後端連不上時瀏覽器自動切換到內建的 TypeScript 引擎繼續運作。 |
+| 📜 **稽核紀錄與 KPI** | 每個事件寫入 SQLite，可篩選並匯出 CSV／JSON；吞吐、利用率、準時率、等待時間、擁塞、能耗。 |
+
+## 🚀 快速開始
+
+**需求：** Node 18+、Python 3.11（conda 或 venv）。
+
+```bash
+git clone https://github.com/WayneChou-bot/WareTwin.git && cd WareTwin
+
+# 後端
+cd backend
+conda create -n waretwin python=3.11 -y && conda activate waretwin
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 前端（另一個終端）
+cd frontend
+npm install
+npm run dev          # → http://localhost:5173
+```
+
+TopBar 顯示藍色 **BACKEND** 代表瀏覽器已連上 Python 引擎；橘色 **LOCAL** 代表正在跑內建的備援引擎。Windows 可直接執行 `dev.ps1` 同時啟動兩者。
+
+接著照 [Demo 腳本](docs/DEMO.md) 走十個情境，從正常運作到端到端處理複合故障。
+
+## 🧩 AI 模式
+
+AI 層不需要金鑰也能運作。在 `backend/.env` 設定 `OPENAI_API_KEY`（參考 `.env.example`）即可從 demo 模式切到真實模型：
+
+| | Demo 模式（預設，無金鑰） | LLM 模式 |
+|---|---|---|
+| Copilot | 對即時狀態做規則式分析（吞吐、擁塞、指派、故障風險、改善建議），附引用 | `gpt-4o-mini`，JSON schema 輸出，引用限定快照中存在的 id |
+| VLM | 以 ground truth 模擬感知（標示 `sim`） | 視覺模型分析實際 CCTV 畫面 |
+| What-if 建議 | 由差異值套版產生的兩句話 | LLM 寫的兩句話 |
+
+公開 Demo 刻意跑在 demo 模式：功能完整，且不會產生 API 費用。
+
+## 🏗 架構
+
+<img src="docs/architecture.svg" width="100%" alt="架構圖" />
+
+**Twin State** 是唯一的契約——`frontend/src/schema/twin_state.ts` ≡ `backend/app/schema.py`（Pydantic）。兩個引擎共用 bit-level 一致的 PRNG，任務序列與指派結果相同；What-if 在後端以深拷貝引擎（狀態 + FSM 執行期 + 亂數）執行。
+
+```
+WareTwin/
+├── frontend/        React 18 · TypeScript · Vite · React Three Fiber · zustand
+│   └── src/simulation/   TypeScript 引擎（本地備援）
+├── backend/         FastAPI · Pydantic v2 · asyncio · SQLite
+│   └── app/sim/          Python 引擎 · A* · What-if
+│   └── app/ai/           Copilot · VLM
+├── docs/            schema · layout 產生器 · demo 腳本 · 截圖
+└── dev.ps1
+```
+
+## 🧪 測試
+
+```bash
+cd backend && python -m pytest -q      # 17 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
+cd frontend && npm test                 # 8 個：TypeScript 引擎的相同契約
+```
+
+## ☁️ 部署
+
+前端是靜態檔（Vercel／GitHub Pages）；後端是長駐的 WebSocket 服務（Render／Fly.io／任何 container，不能用 serverless）。已附 `backend/render.yaml`、`Dockerfile`、`fly.toml` 與 `frontend/vercel.json`；前端設 `VITE_WS_URL=wss://…/ws`、後端設 `TWIN_CORS_ORIGINS`。細節見 [`frontend/README.md`](frontend/README.md#部署)。
+
+## 🗺 Roadmap
+
+- [x] Phase 1 3D 基礎 · [x] Phase 2 機器人模擬 · [x] Phase 3 後端 + WebSocket · [x] Phase 4 營運 · [x] Phase 5 AI · [x] Phase 6 What-if
+- [ ] Phase 7 機器人擴充：把 ROS 2／Webots 的機器人位姿餵進 `SimEngine.step()`，Twin State 契約與 UI 不變
+- [ ] 多機協同規劃（CBS／時間窗預約）取代目前的讓路／退避死鎖解除
+- [ ] PostgreSQL + Redis 支援多實例部署
+
+## 📚 資料與致謝
+
+- 倉庫佈局為**合成資料**，由 `docs/layout/gen_layout.py` 產生；未使用任何第三方圖資或開放資料集。
+- 字型：[Inter](https://rsms.me/inter/)、[JetBrains Mono](https://www.jetbrains.com/lp/mono/)，經 Google Fonts（SIL OFL 1.1）。
+- 使用 [Three.js](https://threejs.org)、[React Three Fiber](https://docs.pmnd.rs/react-three-fiber)、[drei](https://github.com/pmndrs/drei)、[zustand](https://github.com/pmndrs/zustand)、[FastAPI](https://fastapi.tiangolo.com)、[Pydantic](https://docs.pydantic.dev)、[OpenAI Python SDK](https://github.com/openai/openai-python)——皆為 MIT／BSD／Apache 授權。
+- 設計期間參考的圖片（NVIDIA Isaac Sim 截圖、AMR 產品照）不包含在本 repo 中。
+
+## 📄 授權
+
+[MIT](LICENSE) © 2026 Wayne Chou

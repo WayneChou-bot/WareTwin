@@ -1,0 +1,13 @@
+# Fly.io：fly launch --no-deploy 之後 fly deploy
+app = "warehouse-twin-backend"
+primary_region = "nrt"
+[build]
+  dockerfile = "Dockerfile"
+[env]
+  TWIN_DB = "/tmp/twin.db"
+  TWIN_CORS_REGEX = "https://.*\\.vercel\\.app"
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1

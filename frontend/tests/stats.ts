@@ -1,0 +1,13 @@
+import layoutJson from "../src/layout/warehouse_layout.json";
+import type { WarehouseLayout } from "../src/layout/types";
+import { SimEngine } from "../src/simulation/engine";
+const eng = new SimEngine(layoutJson as unknown as WarehouseLayout, { seed: 7 });
+const t0 = performance.now();
+for (let t = 0; t < 12000; t++) eng.step();
+const ms = performance.now() - t0;
+const k = eng.state.kpi;
+console.log(`12000 ticks in ${ms.toFixed(0)} ms (${(ms / 12000).toFixed(3)} ms/tick)`);
+console.log("completed", k.operation.completed_today, "pending", k.operation.pending, "ongoing", k.operation.ongoing, "util", k.operation.avg_utilization.toFixed(2), "wait_s", k.efficiency.avg_wait_time_s, "on_time", k.operation.on_time_rate.toFixed(2), "avg_task_s", k.operation.avg_task_time_s);
+console.log("fleet", JSON.stringify(k.fleet));
+console.log("fsm", Object.values(eng.state.robots).map((r) => `${r.id}:${r.fsm}:${r.battery.toFixed(0)}`).join(" "));
+console.log("replans", eng.state.recent_events.filter((e) => e.type === "ROUTE_REPLANNED").length, "/500 recent events");
