@@ -1,0 +1,6 @@
+# 統一用 LF（避免 Windows 上每次 git add 的 CRLF 警告；編輯器照 .editorconfig / 預設即可）
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.jpg binary
+*.ico binary

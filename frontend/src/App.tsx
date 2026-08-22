@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useStore } from "./state/store";
 import { TopBar } from "./components/shell/TopBar";
 import { useSimulationRunner } from "./simulation/runner";
 import { Viewport } from "./components/views/Viewport";
@@ -28,10 +29,39 @@ function useFitScale() {
   }, []);
 }
 
+/** 後端回 RATE_LIMITED / TOO_LARGE 等訊息時的短暫提示 */
+function Notice() {
+  const notice = useStore((s) => s.notice);
+  const setNotice = useStore((s) => s.setNotice);
+  useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(null), Math.max(0, notice.until - Date.now())); return () => clearTimeout(t); }, [notice, setNotice]);
+  if (!notice) return null;
+  return <div className={"notice " + notice.kind} onClick={() => setNotice(null)}>{notice.text}</div>;
+}
+
+/** 這是 desktop 營運中心；窄螢幕（手機）整體縮到 0.3 倍根本看不清，先給提示，可選擇仍然繼續 */
+function NarrowScreenGate({ children }: { children: React.ReactNode }) {
+  const [dismissed, setDismissed] = useState(false);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
+  useEffect(() => { const f = () => setNarrow(window.innerWidth < 900); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  if (narrow && !dismissed) {
+    return (
+      <div className="narrow-gate">
+        <div className="brand"><span className="ai">Ware</span><span>Twin</span></div>
+        <h2>Designed for desktop</h2>
+        <p>WareTwin is a 3D operations console laid out for screens ≥ 1280 px wide. On a phone the interface is scaled to about a quarter of its size and becomes unreadable.</p>
+        <p>Open <b>ware-twin.vercel.app</b> on a laptop or desktop browser for the full experience.</p>
+        <button className="btn" onClick={() => setDismissed(true)}>Continue anyway</button>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   useFitScale();
   useSimulationRunner();
   return (
+    <NarrowScreenGate>
     <div className="shell">
       <TopBar />
       <div className="shell-body">
@@ -57,6 +87,8 @@ export default function App() {
       <OpsDrawer />
       <WhatIfDrawer />
       <Modals />
+      <Notice />
     </div>
+    </NarrowScreenGate>
   );
 }

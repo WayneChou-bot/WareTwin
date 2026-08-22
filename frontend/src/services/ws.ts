@@ -101,7 +101,16 @@ function handle(msg: ServerMessage) {
     case "HEATMAP": st.setHeat(msg.layer); break;
     case "COPILOT_REPLY": copilotListeners.forEach((fn) => fn(msg as unknown as CopilotReply)); break;
     case "WHATIF_RESULT": whatifListeners.forEach((fn) => fn(msg.result)); break;
-    case "ERROR": console.warn("[ws] server error", msg.code, msg.message); break;
+    case "ERROR": {
+      console.warn("[ws] server error", msg.code, msg.message);
+      if (msg.code === "RATE_LIMITED" || msg.code === "TOO_LARGE") {
+        st.setNotice(`${msg.code === "RATE_LIMITED" ? "Rate limit" : "Request too large"}: ${msg.message}`);
+        // Copilot 等待中的泡泡也要收掉
+        const rid = (msg as unknown as { request_id?: string }).request_id;
+        if (rid) copilotListeners.forEach((fn) => fn({ request_id: rid, text: `⏳ ${msg.message}`, citations: [] }));
+      }
+      break;
+    }
     default: break;
   }
 }

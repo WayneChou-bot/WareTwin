@@ -18,7 +18,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter, ValidationError
@@ -31,7 +31,9 @@ except Exception:
 from .ai import copilot as copilot_ai
 from .ai import vlm as vlm_ai
 from .db import TwinDB
-from .schema import ClientMessage, ScenarioInjection, NewTask, TwinState, WhatIfRequest
+from .guard import MAX_BODY_BYTES, MAX_WS_MESSAGE_BYTES, client_key, limiter, origin_allowed
+from .schema import (ClearInjectionBody, ClientMessage, CopilotBody, NewTask, ScenarioInjection, SimControlBody, TwinState,
+                     VlmObserveBody, WhatIfRequest)
 from .sim.engine import SimEngine, SIM
 from .sim.whatif import run_whatif
 from .sim.navgrid import load_layout
@@ -208,12 +210,26 @@ class TwinServer:
         S["sim"]["speed"] = self.speed; S["sim"]["mode"] = "PAUSED" if self.paused else "LIVE"
         return {"type": "FULL", "state": S}
 
+    WS_BUCKET = {"SIM_CONTROL": "mutate", "INJECT": "mutate", "CLEAR_INJECTION": "mutate", "CREATE_TASK": "mutate",
+                 "COPILOT_ASK": "ai", "WHATIF_RUN": "whatif"}
+
     async def handle(self, ws: WebSocket, raw: str) -> None:
+        key = client_key(dict(ws.headers), ws.client.host if ws.client else None)
+        if len(raw) > MAX_WS_MESSAGE_BYTES:
+            await ws.send_text(json.dumps({"type": "ERROR", "code": "TOO_LARGE", "message": f"message exceeds {MAX_WS_MESSAGE_BYTES // 1024} KB"})); return
+        ok, wait = limiter.check("ws", key)
+        if not ok:
+            await ws.send_text(json.dumps({"type": "ERROR", "code": "RATE_LIMITED", "message": f"too many messages — retry in {wait:.0f} s"})); return
         try:
             msg = client_adapter.validate_json(raw)
         except ValidationError as e:
             await ws.send_text(json.dumps({"type": "ERROR", "code": "BAD_MESSAGE", "message": str(e)[:300]})); return
         t = msg.type
+        bucket = self.WS_BUCKET.get(t)
+        if bucket:
+            ok, wait = limiter.check(bucket, key)
+            if not ok:
+                await ws.send_text(json.dumps({"type": "ERROR", "code": "RATE_LIMITED", "message": f"{t} limit reached — retry in {wait:.0f} s", "request_id": getattr(msg, "request_id", None)})); return
         eng = self.engine
         if t == "RESYNC":
             self._snapshot_prev(); self._prev["_robots"] = {}
@@ -288,6 +304,7 @@ async def lifespan(app: FastAPI):
     server._snapshot_prev()
     if server._task and not server._task.done():
         server._task.cancel()
+    server.last_progress = time.monotonic()   # 剛啟動不算停擺
     server._task = asyncio.create_task(server.run())
     try:
         yield
@@ -306,8 +323,28 @@ _origins = [o.strip() for o in os.environ.get("TWIN_CORS_ORIGINS", "*").split(",
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_origin_regex=os.environ.get("TWIN_CORS_REGEX") or None, allow_methods=["*"], allow_headers=["*"])
 
 
+@app.middleware("http")
+async def guard_middleware(request: Request, call_next):
+    """公開 Demo 防護：會改狀態的請求檢查 Origin + body 大小；GET 不受影響（health / state / layout 可自由讀取）。"""
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        if not origin_allowed(request.headers.get("origin")):
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
+            return JSONResponse({"detail": f"body exceeds {MAX_BODY_BYTES // 1024} KB"}, status_code=413)
+    return await call_next(request)
+
+
+def throttle(request: Request, bucket: str) -> None:
+    ok, wait = limiter.check(bucket, client_key(dict(request.headers), request.client.host if request.client else None))
+    if not ok:
+        raise HTTPException(429, f"rate limit ({bucket}) — retry in {wait:.0f} s", headers={"Retry-After": str(int(wait) + 1)})
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
+    if not origin_allowed(ws.headers.get("origin")):
+        await ws.close(code=1008, reason="origin not allowed"); return
     await ws.accept()
     server.clients.add(ws)
     try:
@@ -388,7 +425,8 @@ def get_decisions(limit: int = 20) -> list[dict[str, Any]]:
 
 
 @app.post("/api/inject")
-async def post_inject(body: dict[str, Any]) -> dict[str, Any]:
+async def post_inject(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    throttle(request, "mutate")
     try:
         inj = inject_adapter.validate_python(body)
     except ValidationError as e:
@@ -398,19 +436,22 @@ async def post_inject(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/inject/clear")
-async def post_clear(body: dict[str, Any]) -> dict[str, Any]:
-    server.engine.clear_injection(str(body.get("kind")), str(body.get("target_id")))
+async def post_clear(body: ClearInjectionBody, request: Request) -> dict[str, Any]:
+    throttle(request, "mutate")
+    server.engine.clear_injection(body.kind, body.target_id)
     return {"ok": True}
 
 
 @app.post("/api/tasks")
-async def post_task(body: NewTask) -> dict[str, Any]:
+async def post_task(body: NewTask, request: Request) -> dict[str, Any]:
+    throttle(request, "mutate")
     return server.engine.create_task(body.type, body.priority, body.source, body.destination, body.load_units)
 
 
 @app.post("/api/copilot")
-async def post_copilot(body: dict[str, Any]) -> dict[str, Any]:
-    q = str(body.get("question", "")).strip()
+async def post_copilot(body: CopilotBody, request: Request) -> dict[str, Any]:
+    throttle(request, "ai")
+    q = body.question.strip()
     if not q:
         raise HTTPException(400, "question required")
     snapshot = json.loads(json.dumps(server.engine.state))
@@ -418,16 +459,17 @@ async def post_copilot(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/vlm/observe")
-async def post_vlm(body: dict[str, Any]) -> dict[str, Any]:
+async def post_vlm(body: VlmObserveBody, request: Request) -> dict[str, Any]:
     """前端把 Live Camera 畫面（JPEG data URL）送來；回傳 VlmObservation 並寫入 cameras[id].last_observation。"""
-    cam_id = str(body.get("camera_id", ""))
+    throttle(request, "ai")
+    cam_id = body.camera_id
     eng = server.engine
     if cam_id not in eng.state["cameras"]:
         raise HTTPException(404, "unknown camera")
     if eng.state["cameras"][cam_id]["status"] == "OFFLINE":
         raise HTTPException(409, "camera offline")
     snapshot = json.loads(json.dumps(eng.state))
-    obs = await asyncio.to_thread(vlm_ai.observe, cam_id, body.get("image_b64"), snapshot, server.layout)
+    obs = await asyncio.to_thread(vlm_ai.observe, cam_id, body.image_b64, snapshot, server.layout)
     eng.state["cameras"][cam_id]["last_observation"] = obs
     sev = obs["severity"] if obs["event"] != "none" else "INFO"
     eng.emit("VLM_OBSERVATION", "VLM", sev, f"{cam_id}: {obs['event'].replace('_', ' ')} ({obs['confidence']:.0%}) — {obs.get('description', '')}", camera_id=cam_id, zone_id=obs["zone"], payload={"confidence": obs["confidence"], "raw": obs.get("raw")})
@@ -439,8 +481,9 @@ async def post_vlm(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/whatif")
-async def post_whatif(body: dict[str, Any]) -> dict[str, Any]:
+async def post_whatif(body: dict[str, Any], request: Request) -> dict[str, Any]:
     """複製 LIVE 引擎、注入情境、跑 duration_ticks、回傳 Baseline vs Scenario 對照。LIVE 不受影響。"""
+    throttle(request, "whatif")
     try:
         req = WhatIfRequest.model_validate(body).model_dump(exclude_none=True)
     except ValidationError as e:
@@ -455,10 +498,10 @@ def ai_status() -> dict[str, Any]:
 
 
 @app.post("/api/sim")
-async def post_sim(body: dict[str, Any]) -> dict[str, Any]:
-    action = body.get("action"); speed = body.get("speed")
-    if action == "PAUSE": server.paused = True
-    elif action == "PLAY": server.paused = False
-    elif action == "RESET": server.reset(body.get("seed"))
-    if speed in (0, 1, 2, 5, 10): server.speed = speed
+async def post_sim(body: SimControlBody, request: Request) -> dict[str, Any]:
+    throttle(request, "mutate")
+    if body.action == "PAUSE": server.paused = True
+    elif body.action == "PLAY": server.paused = False
+    elif body.action == "RESET": server.reset(body.seed)
+    if body.speed is not None: server.speed = body.speed
     return health_payload()

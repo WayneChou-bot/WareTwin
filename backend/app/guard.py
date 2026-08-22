@@ -1,0 +1,89 @@
+"""
+公開 Demo 的防護層（第 2 批 review 修正）
+
+  - Origin 檢查：設定了 TWIN_CORS_ORIGINS / TWIN_CORS_REGEX 時，WebSocket 與會改變狀態的 POST
+    必須帶允許的 Origin（瀏覽器一定會帶；curl 沒帶 → 拒絕，除非 TWIN_ALLOW_NO_ORIGIN=1）。
+    沒設定（本機開發，預設 "*"）則不檢查。
+  - Rate limit：記憶體內的 sliding window，依 client IP（Render 之後走 X-Forwarded-For）分桶：
+        mutate  注入 / 清除 / 建任務 / 播放暫停重置      20 次 / 分鐘
+        ai      Copilot / VLM                           10 次 / 分鐘
+        whatif  What-if                                  4 次 / 分鐘
+        ws      每條 WebSocket 的訊息總量                120 次 / 分鐘
+    TWIN_RATE_LIMIT=0 可關閉（測試／本機）。
+  - Body 大小上限：REST 512 KB、WS 單則訊息 64 KB（VLM 影像走 REST）。
+"""
+from __future__ import annotations
+
+import os
+import re
+import time
+from collections import defaultdict, deque
+from typing import Deque
+
+MAX_BODY_BYTES = 512 * 1024
+MAX_WS_MESSAGE_BYTES = 64 * 1024
+
+LIMITS: dict[str, tuple[int, float]] = {   # bucket → (max calls, window seconds)
+    "mutate": (20, 60.0),
+    "ai": (10, 60.0),
+    "whatif": (4, 60.0),
+    "ws": (120, 60.0),
+}
+
+
+def rate_limit_enabled() -> bool:
+    return os.environ.get("TWIN_RATE_LIMIT", "1") != "0"
+
+
+class RateLimiter:
+    def __init__(self) -> None:
+        self._hits: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
+
+    def check(self, bucket: str, key: str) -> tuple[bool, float]:
+        """回傳 (允許?, 需等待秒數)。"""
+        if not rate_limit_enabled():
+            return True, 0.0
+        limit, window = LIMITS[bucket]
+        now = time.monotonic()
+        q = self._hits[(bucket, key)]
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            return False, round(window - (now - q[0]), 1)
+        q.append(now)
+        return True, 0.0
+
+    def reset(self) -> None:
+        self._hits.clear()
+
+
+limiter = RateLimiter()
+
+
+def client_key(headers: dict[str, str] | None, host: str | None) -> str:
+    """Render / Vercel 等反向代理會放 X-Forwarded-For，第一個才是真正的 client。"""
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    xff = h.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return host or "unknown"
+
+
+def _allowed_origins() -> tuple[list[str], re.Pattern[str] | None, bool]:
+    raw = os.environ.get("TWIN_CORS_ORIGINS", "*")
+    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    regex = os.environ.get("TWIN_CORS_REGEX") or None
+    open_ = "*" in origins and not regex
+    return origins, re.compile(regex) if regex else None, open_
+
+
+def origin_allowed(origin: str | None) -> bool:
+    origins, regex, open_ = _allowed_origins()
+    if open_:
+        return True
+    if not origin:
+        return os.environ.get("TWIN_ALLOW_NO_ORIGIN", "0") == "1"
+    o = origin.rstrip("/")
+    if o in origins:
+        return True
+    return bool(regex and regex.fullmatch(o))

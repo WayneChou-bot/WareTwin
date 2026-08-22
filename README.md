@@ -98,7 +98,7 @@ WareTwin/
 ## 🧪 Tests
 
 ```bash
-cd backend && python -m pytest -q      # 22 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
+cd backend && python -m pytest -q      # 26 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
 cd frontend && npm test                 # 9 tests: same engine contract in TypeScript
 ```
@@ -106,6 +106,20 @@ cd frontend && npm test                 # 9 tests: same engine contract in TypeS
 ## ☁️ Deployment
 
 Frontend is static (Vercel / GitHub Pages); backend is a long-running WebSocket service (Render / Fly.io / any container — not serverless). `backend/render.yaml`, `Dockerfile`, `fly.toml` and `frontend/vercel.json` are included; set `VITE_WS_URL=wss://…/ws` on the frontend and `TWIN_CORS_ORIGINS` on the backend. Details in [`frontend/README.md`](frontend/README.md#部署).
+
+## 🔒 Running it in public
+
+The hosted demo is deliberately a **single shared simulation** — every visitor sees the same warehouse and can inject the same failures, which is the point of the demo. To keep that safe the backend ships with a small guard layer (`backend/app/guard.py`):
+
+| Guard | Default |
+|---|---|
+| Input limits (Pydantic) | `TASK_BURST.count ≤ 30`, injections ≤ 10 min, What-if ≤ 8 injections / 10 min, Copilot question ≤ 500 chars, VLM frame ≤ 400 KB |
+| Rate limit (per client IP, in-memory) | mutations 20/min · Copilot & VLM 10/min · What-if 4/min · WebSocket messages 120/min → `429` / `RATE_LIMITED` |
+| Origin check | when `TWIN_CORS_ORIGINS` / `TWIN_CORS_REGEX` are set, WebSocket and POST must carry an allowed `Origin` (`TWIN_ALLOW_NO_ORIGIN=1` re-enables curl) |
+| Body size | REST 512 KB, WebSocket message 64 KB |
+| Health | `/api/health` returns `503` when the simulation task died or has not advanced for `TWIN_HEALTH_STALL_S` seconds, so Render restarts it |
+
+Reads (`/api/state`, `/api/health`, …) are never limited. `TWIN_RATE_LIMIT=0` switches the limiter off for local development. The UI is desktop-only (≥ 1280 px); phones get a notice instead of an unreadable 0.25× layout. Audit history lives in SQLite on the instance and resets when the free-tier instance is replaced.
 
 ## 🗺 Roadmap
 

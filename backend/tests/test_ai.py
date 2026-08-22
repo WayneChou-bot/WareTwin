@@ -55,7 +55,7 @@ def test_copilot_and_vlm_endpoints():
     with TestClient(app) as client:
         st = client.get("/api/ai/status").json(); assert "llm" in st
         r = client.post("/api/copilot", json={"question": "How can we improve throughput?"}); assert r.status_code == 200 and r.json()["text"]
-        assert client.post("/api/copilot", json={}).status_code == 400
+        assert client.post("/api/copilot", json={}).status_code == 422
         r = client.post("/api/vlm/observe", json={"camera_id": "CAM-A01"}); assert r.status_code == 200 and r.json()["event"] in ("none", "human_detected")
         assert client.post("/api/vlm/observe", json={"camera_id": "NOPE"}).status_code == 404
         assert server.engine.state["cameras"]["CAM-A01"]["last_observation"] is not None

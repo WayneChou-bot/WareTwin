@@ -468,19 +468,19 @@ class CameraOffline(_Inj):
 class HumanIntrusion(_Inj):
     kind: Literal["HUMAN_INTRUSION"] = "HUMAN_INTRUSION"
     zone_id: ZoneId
-    duration_ticks: int = Field(gt=0)
+    duration_ticks: int = Field(gt=0, le=6000)      # ≤ 10 min
 
 
 class TrafficCongestion(_Inj):
     kind: Literal["TRAFFIC_CONGESTION"] = "TRAFFIC_CONGESTION"
     zone_id: ZoneId
     level: Unit
-    duration_ticks: int = Field(gt=0)
+    duration_ticks: int = Field(gt=0, le=6000)
 
 
 class TaskBurst(_Inj):
     kind: Literal["TASK_BURST"] = "TASK_BURST"
-    count: int = Field(gt=0)
+    count: int = Field(gt=0, le=30)                  # 公開 Demo：一次最多 30 筆
     priority: TaskPriority = TaskPriority.NORMAL
 
 
@@ -493,8 +493,8 @@ ScenarioInjection = Annotated[
 
 class WhatIfRequest(_Base):
     scenario_name: str
-    injections: list[ScenarioInjection]
-    duration_ticks: int = Field(default=600, gt=0)
+    injections: list[ScenarioInjection] = Field(max_length=8)
+    duration_ticks: int = Field(default=600, gt=0, le=6000)
     run_baseline: bool = True
 
 
@@ -610,8 +610,8 @@ class NewTask(_Base):
     priority: TaskPriority = TaskPriority.NORMAL
     source: LocationId
     destination: LocationId
-    load_units: int = Field(default=1, ge=1)
-    deadline_s: Optional[float] = None
+    load_units: int = Field(default=1, ge=1, le=4)
+    deadline_s: Optional[float] = Field(default=None, gt=0, le=3600)
 
 
 class CmdCreateTask(_Base):
@@ -636,8 +636,30 @@ class CmdWhatIfRun(_Base):
 
 class CmdCopilotAsk(_Base):
     type: Literal["COPILOT_ASK"] = "COPILOT_ASK"
-    request_id: str
-    question: str
+    request_id: str = Field(max_length=32)
+    question: str = Field(min_length=1, max_length=500)
+
+
+class CopilotBody(_Base):
+    """REST /api/copilot"""
+    question: str = Field(min_length=1, max_length=500)
+
+
+class VlmObserveBody(_Base):
+    """REST /api/vlm/observe：前端送 512px JPEG data URL（通常 30–80 KB）；上限 400 KB 的 base64"""
+    camera_id: CameraId
+    image_b64: Optional[str] = Field(default=None, max_length=400_000)
+
+
+class ClearInjectionBody(_Base):
+    kind: str = Field(max_length=32)
+    target_id: str = Field(max_length=32)
+
+
+class SimControlBody(_Base):
+    action: Optional[Literal["PLAY", "PAUSE", "RESET"]] = None
+    speed: Optional[Literal[0, 1, 2, 5, 10]] = None
+    seed: Optional[int] = Field(default=None, ge=0, le=2**31 - 1)
 
 
 ClientMessage = Annotated[

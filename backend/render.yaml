@@ -16,6 +16,6 @@ services:
       - key: TWIN_DB
         value: /tmp/twin.db
       - key: TWIN_CORS_ORIGINS
-        value: http://localhost:5173          # 部署後改成你的 Vercel 網域，多個用逗號分隔
+        value: https://ware-twin.vercel.app   # 你的 Vercel 網域，多個用逗號分隔（設了之後 WS/POST 會檢查 Origin）
       - key: TWIN_CORS_REGEX
         value: https://.*\.vercel\.app        # 讓 Vercel 的 preview 網域也能連
