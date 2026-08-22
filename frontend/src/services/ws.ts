@@ -50,7 +50,15 @@ export function wsDisconnect() { stopped = true; clearTimeout(reconnectTimer); s
 function open() {
   if (stopped) return;
   onStateChange?.("connecting");
-  const ws = new WebSocket(WS_URL);
+  let ws: WebSocket;
+  try {
+    // https 頁面開 ws:// 會同步丟 SecurityError（沒設 VITE_WS_URL 時），要接住，否則整個 App 掛掉
+    ws = new WebSocket(WS_URL);
+  } catch (e) {
+    console.warn("[ws] cannot open", WS_URL, e, "— falling back to local engine");
+    onStateChange?.("offline");
+    return;
+  }
   socket = ws;
   const timeout = window.setTimeout(() => { if (ws.readyState !== WebSocket.OPEN) ws.close(); }, 2500);
   ws.onopen = () => { clearTimeout(timeout); onStateChange?.("online"); };
