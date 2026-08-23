@@ -123,6 +123,6 @@ def test_floor2_grid_matches_ts_rules():
     from app.sim.navgrid import build_nav_grid, load_layout
     g2 = build_nav_grid(load_layout(), 2)
     at = lambda x, z: g2.cells[int(z) * g2.cols + int(x)]
-    assert at(51.5, 44.5) != 1   # 電梯格
+    assert at(51.5, 44.5) == 1   # 電梯井道 = 障礙（round-8：進出轎廂走 micro-move，不經網格）
     assert at(20.5, 47.5) != 1   # 夾層走道
     assert at(80, 20) == 1       # footprint 外

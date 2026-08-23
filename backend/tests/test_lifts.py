@@ -161,6 +161,34 @@ def test_cancelled_robot_releases_lift():
         assert rid not in L_["queue"]["1"] and rid not in L_["queue"]["2"]
 
 
+def test_shaft_blocked_and_paths_avoid_it():
+    """井道是導航障礙（round-8）：兩層網格都封鎖、路徑不穿越、非電梯流程的機器人不會進入井道"""
+    from app.sim.navgrid import build_nav_grid
+    for fl in (1, 2):
+        g = build_nav_grid(L, fl)
+        for l in L["lifts"]:
+            c = l["cell"]
+            assert g.cells[c[1] * g.cols + c[0]] == 1, f"{l['id']} cabin F{fl} not blocked"
+            for i in range(3):
+                assert g.cells[c[1] * g.cols + (c[0] - 2 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
+            for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-1, -2), (-1, 2), (-2, 0)):
+                assert g.cells[(c[1] + dr) * g.cols + (c[0] + dc)] != 1, f"{l['id']} exit({dc},{dr}) F{fl} blocked"
+    e = SimEngine(L, seed=13)
+    e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
+    e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02")
+
+    def in_shaft(x: float, z: float) -> bool:
+        return any(abs(x - (l["cell"][0] + 0.5)) < 1.4 and abs(z - (l["cell"][1] + 0.5)) < 1.4 for l in L["lifts"])
+
+    for _ in range(20000):
+        e.step()
+        for r in e.state["robots"].values():
+            for p in r["path"][r["path_index"]:]:
+                assert not in_shaft(p[0] + 0.5, p[1] + 0.5), f"{r['id']} path crosses shaft"
+            if not r["lift_stage"] and not r["lift_id"]:
+                assert not in_shaft(r["position"][0], r["position"][2]), f"{r['id']} inside shaft outside lift flow"
+
+
 def test_lift_lobby_congestion_resolves():
     """出口節點與排隊線分開：雙向大量跨樓任務不會在電梯口互卡（修正 R11/R20 卡死 bug）。"""
     e = SimEngine(L, seed=5)

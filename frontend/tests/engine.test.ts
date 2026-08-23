@@ -115,7 +115,7 @@ describe("multi-floor", () => {
   it("floor-2 grid only covers the mezzanine footprint", () => {
     const g2 = buildNavGrid(layout as never, 2);
     const at = (x: number, z: number) => g2.cells[Math.floor(z) * g2.cols + Math.floor(x)];
-    expect(at(51.5, 44.5)).not.toBe(1);  // 電梯格可走
+    expect(at(51.5, 44.5)).toBe(1);      // 電梯井道 = 障礙（round-8：進出轎廂走 microMove，不經網格）
     expect(at(20.5, 47.5)).not.toBe(1);  // 夾層走道
     expect(at(80, 20)).toBe(1);          // footprint 外 = 不存在的樓板
   });
@@ -359,4 +359,34 @@ describe("rehydration edge cases（round-7）", () => {
       expect(b.state.kpi.operation.avg_task_time_s).toBeGreaterThan(0);   // 剛好有新完成：至少不得歸零
     }
   }, 120000);
+});
+
+describe("lift shaft as nav obstacle（round-8）", () => {
+  it("兩層網格都封鎖井道 3×3；排隊格與出口候選全部維持可走", () => {
+    for (const fl of [1, 2]) {
+      const g = buildNavGrid(layout as never, fl);
+      for (const l of layout.lifts) {
+        expect(g.cells[l.cell[1] * g.cols + l.cell[0]], `${l.id} cabin F${fl}`).toBe(1);
+        for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 2 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
+        for (const [dc, dr] of [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-1, -2], [-1, 2], [-2, 0]])
+          expect(g.cells[(l.cell[1] + dr) * g.cols + (l.cell[0] + dc)], `${l.id} exit(${dc},${dr}) F${fl}`).not.toBe(1);
+      }
+    }
+  });
+
+  it("A* 路徑永不穿越井道；非電梯流程的機器人不會出現在井道範圍", () => {
+    const eng = new SimEngine(layout, { seed: 41 });
+    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
+    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" });
+    const inShaft = (x: number, z: number) => layout.lifts.some((l) => Math.abs(x - (l.cell[0] + 0.5)) < 1.4 && Math.abs(z - (l.cell[1] + 0.5)) < 1.4);
+    for (let i = 0; i < 20000; i++) {
+      eng.step();
+      for (const r of Object.values(eng.state.robots)) {
+        for (let pi = r.path_index; pi < r.path.length; pi++) {
+          if (inShaft(r.path[pi][0] + 0.5, r.path[pi][1] + 0.5)) throw new Error(`${r.id} path crosses shaft at tick ${eng.state.sim.tick}`);
+        }
+        if (!r.lift_stage && !r.lift_id && inShaft(r.position[0], r.position[2])) throw new Error(`${r.id} inside shaft outside lift flow at tick ${eng.state.sim.tick}`);
+      }
+    }
+  }, 180000);
 });

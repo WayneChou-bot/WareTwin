@@ -26,7 +26,9 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       const explode = !lite && st.activeFloor === "exploded" && r.floor === 2 && !r.lift_id ? 5 : 0;   // lite（CCTV）場景平台不上移，機器人也不能移
 
       const ty = (lift ? lift.y : FLOOR_ELEV[r.floor] ?? 0) + explode;
-      const ky = lift ? 1 - Math.pow(0.002, dt) : smooth ? 1 - Math.pow(0.25, dt) : 1;
+      // 搭電梯時的平滑係數必須與 Mezzanine 平台的 k（1 - 0.02^dt）完全相同：
+      // 兩者追同一個 lift.y、初始高度也相同 → 每一幀軌跡一致，機器人才會「黏」在平台上，不會領先/落後產生掉落感
+      const ky = lift ? 1 - Math.pow(0.02, dt) : smooth ? 1 - Math.pow(0.25, dt) : 1;
       g.position.y += (ty - g.position.y) * ky;
       let dh = -r.heading - g.rotation.y; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
       g.rotation.y += dh * k;

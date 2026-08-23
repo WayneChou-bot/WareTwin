@@ -7,6 +7,17 @@ import type { WarehouseLayout } from "./types";
 export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number; rows: number; cells: Uint8Array } {
   const { cols, rows, cell_size: cs } = layout.grid;
   const cells = new Uint8Array(cols * rows);
+  // 電梯井道（鋼架＋護網）在每個樓層都是實體障礙：一般路徑必須繞過，
+  // 進出轎廂只走電梯狀態機的 microMove（不經網格）。取轎廂為中心的 3×3 格，
+  // 排隊格（cell-2-i）與全部出口候選點都在外面、維持可走。
+  const blockLifts = () => {
+    for (const l of layout.lifts ?? []) {
+      const x = l.cell[0] + 0.5, z = l.cell[1] + 0.5;
+      const c0 = Math.max(0, Math.floor((x - 1.4) / cs)), c1 = Math.min(cols - 1, Math.ceil((x + 1.4) / cs) - 1);
+      const r0 = Math.max(0, Math.floor((z - 1.4) / cs)), r1 = Math.min(rows - 1, Math.ceil((z + 1.4) / cs) - 1);
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells[r * cols + c] = 1;
+    }
+  };
   if (floor !== 1) {
     // 二樓（夾層）：footprint 之外全是「不存在的樓板」= 障礙；footprint 內可走，再扣掉該樓層貨架
     cells.fill(1);
@@ -23,6 +34,7 @@ export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number
       const r0 = Math.max(0, Math.floor(z0 / cs)), r1 = Math.min(rows - 1, Math.ceil(z1 / cs) - 1);
       for (let rr = r0; rr <= r1; rr++) for (let cc = c0; cc <= c1; cc++) cells[rr * cols + cc] = 1;
     }
+    blockLifts();
     return { cols, rows, cells };
   }
   const fillRect = (x0: number, z0: number, x1: number, z1: number, v: number) => {
@@ -43,5 +55,6 @@ export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number
   }
   for (const ra of layout.restricted_areas) if (!ra.robots_allowed) fillRect(ra.rect[0], ra.rect[1], ra.rect[2], ra.rect[3], 1);
   for (const s of layout.stations) fillRect(s.rect[0], s.rect[1], s.rect[2], s.rect[3], 1);
+  blockLifts();
   return { cols, rows, cells };
 }
