@@ -98,8 +98,8 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 46 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、電梯、複合故障不死鎖、WS/REST、AI、What-if
-cd frontend && npm test                 # 26 個：TypeScript 引擎的相同契約
+cd backend && python -m pytest -q      # 47 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、電梯、複合故障不死鎖、WS/REST、AI、What-if
+cd frontend && npm test                 # 27 個：TypeScript 引擎的相同契約
 ```
 
 ## ☁️ 部署

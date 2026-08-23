@@ -39,6 +39,7 @@ export const SIM = {
   STATION_ARRIVE_CELLS: 2,   // 距工作站 ≤2 格且前方被佔、又沒有空的服務格 → 就地作業
   SERVICE_RADIUS: 1,         // 工作站/貨架 access point 周圍 (Chebyshev) 1 格內的可走格 = 服務格，一台一格
   MIN_SEP: 0.9,              // 任兩台中心距硬下限 (m)：一步會更靠近且低於此值就不走（物理防撞）
+  LIFT_SEP: 0.6,             // 電梯口「對接模式」間距 (m)：排隊遞補/進出轎廂的低速微移動用，比走道 MIN_SEP 緊
   // Phase 7：虛擬 LiDAR 與局部避障
   LIDAR_RANGE: 4.0,          // m
   LIDAR_FOV: Math.PI * 1.5,  // 270°
@@ -415,19 +416,22 @@ export class SimEngine {
   private pickLiftExit(l: (typeof this.layout.lifts)[number], floor: number, skip = 0): [number, number] {
     const grid = this.grids[floor];
     const cabin = this.liftCabin(l);
-    const cand: Array<[number, number]> = [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-1, -2], [-1, 2], [-2, 0]];
-    const clear = (to: [number, number]) => {
+    // 候選全在西側（門那一面）：出轎廂走「門軸 → 閘門 → 出口」兩段路，不斜穿護網/柱子（round-8b）
+    const cand: Array<[number, number]> = [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-3, -2], [-3, 2], [-2, 0]];
+    const segClear = (ax: number, az: number, bx: number, bz: number) => {
       for (const o of Object.values(this.state.robots)) {
         if (o.floor !== floor || o.lift_id) continue;
         if (o.velocity > 0.1) continue;                     // 只避開站著不動的
-        // 點到線段距離
-        const [ax, az] = cabin, [bx, bz] = to;
         const dx = bx - ax, dz = bz - az; const len2 = dx * dx + dz * dz;
         const t = Math.max(0, Math.min(1, ((o.position[0] - ax) * dx + (o.position[2] - az) * dz) / (len2 || 1)));
         const d = Math.hypot(o.position[0] - (ax + dx * t), o.position[2] - (az + dz * t));
         if (d < SIM.MIN_SEP) return false;
       }
       return true;
+    };
+    const clear = (to: [number, number]) => {
+      const g = this.liftGatePoint(l, to);   // 兩段都要淨空：轎廂→閘門、閘門→出口
+      return segClear(cabin[0], cabin[1], g[0], g[1]) && segClear(g[0], g[1], to[0], to[1]);
     };
     const ok: Array<[number, number]> = [];
     for (const [dc, dr] of cand) {
@@ -440,6 +444,14 @@ export class SimEngine {
     return [l.cell[0] - 2 + 0.5, l.cell[1] - 2 + 0.5];
   }
 
+  /** 閘門通過點（round-8b）：門在井道西面（排隊側）。x 固定在圍籬外 0.3 m，z 依出口方向偏向門洞邊緣
+   *  （±0.95，門洞半寬 ~1.12），使「轎廂→閘門」與「閘門→出口」兩段都與排隊格保持 MIN_SEP 以上。 */
+  private liftGatePoint(l: (typeof this.layout.lifts)[number], exit: [number, number]): [number, number] {
+    const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
+    const dz = Math.max(-0.95, Math.min(0.95, exit[1] - cz));
+    return [cx - 1.7, cz + dz];
+  }
+
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
   private microMove(r: RobotState, to: [number, number], speed: number, floorOverride: number | null = null): boolean {
     const fl = floorOverride ?? r.floor;
@@ -448,12 +460,13 @@ export class SimEngine {
     if (dist < 0.05) { r.velocity = 0; return true; }
     const step = Math.min(dist, speed * SIM.TICK_S);
     const nx = r.position[0] + (dx / dist) * step, nz = r.position[2] + (dz / dist) * step;
-    // 排隊/進出轎廂也要維持物理間距（MIN_SEP），不能疊在前一台上
+    // 排隊/進出轎廂維持物理間距，但用「對接模式」的 LIFT_SEP（0.6 m）：低速（0.6–0.9 m/s）微移動
+    // 若沿用走道的 MIN_SEP 0.9，門軸走廊會和排隊線在 0.9 m 標距上互相卡死（BOARDING ↔ TO_LIFT 對峙）
     for (const id in this.state.robots) {
       if (id === r.id) continue; const o = this.state.robots[id];
       if (o.floor !== fl || o.lift_id) continue;
       const dn = Math.hypot(nx - o.position[0], nz - o.position[2]);
-      if (dn < SIM.MIN_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; return false; }
+      if (dn < SIM.LIFT_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; return false; }
     }
     r.position[0] = nx; r.position[2] = nz;
     r.heading = Math.atan2(dz, dx); r.velocity = speed;
@@ -610,7 +623,11 @@ export class SimEngine {
       case "ALIGHTING": {
         const tf = rt.pending!.floor;                      // 出口與間距全用目的樓層計算；r.floor 到抵達出口那一刻才翻
         if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; }
-        const arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED, tf);
+        // 兩段式出轎廂（round-8b）：先沿門軸穿出西側閘門，過了門檻才轉向出口節點 —— 不會斜穿護網/柱子
+        const gate = this.liftGatePoint(lay, rt.liftExit);
+        const throughGate = r.position[0] <= gate[0] + 0.05;
+        const legArrived = this.microMove(r, throughGate ? rt.liftExit : gate, SIM.LIFT_BOARD_SPEED, tf);
+        const arrived = throughGate && legArrived;
         if (!arrived && r.velocity === 0) {
           if (++rt.liftBlockedTicks % 40 === 0) rt.liftExit = this.pickLiftExit(lay, tf, rt.liftBlockedTicks / 40);   // 被擋 4 秒換一個出口
         } else if (r.velocity > 0) rt.liftBlockedTicks = 0;
@@ -910,7 +927,9 @@ export class SimEngine {
       else if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) { this.backOff(r, rt); }
       return;
     }
-    rt.waitTicks = 0;
+    // 注意：waitTicks 不在這裡歸零 —— 要等「真的移動了」才歸零（round-8b）。
+    // 否則純物理間距擋停（下方 MIN_SEP 檢查）每 tick 被重設成 1，永遠到不了 back-off 門檻，
+    // 兩台在窄走道 0.9 m 對峙就永久卡死。
     // 立刻預約下一格，同一 tick 內其他機器人就不會也選它
     if (entering) {
       this.occupancy.set(cellKey(next[0], next[1]), r.id);
@@ -938,6 +957,7 @@ export class SimEngine {
         if (dn < SIM.MIN_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; rt.waitTicks++; r.stats.wait_ticks++; if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) this.backOff(r, rt); return; }
       }
       r.position[0] = nx; r.position[2] = nz;
+      rt.waitTicks = 0;   // 真的動了才算解除阻塞
     }
     r.stats.distance_m += stepLen;
     // 交通熱圖

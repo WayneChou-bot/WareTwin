@@ -189,6 +189,28 @@ def test_shaft_blocked_and_paths_avoid_it():
                 assert not in_shaft(r["position"][0], r["position"][2]), f"{r['id']} inside shaft outside lift flow"
 
 
+def test_alighting_exits_through_gate():
+    """出轎廂一律沿門軸先出西側閘門（round-8b）：井道範圍內不越側牆、絕不往東（柱子/護網）走"""
+    e = SimEngine(L, seed=17)
+    e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
+    e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02")
+    e.create_task("REPLENISH", "CRITICAL", "INBOUND-1", "SHELF-M30")
+    seen = 0
+    for _ in range(40000):
+        e.step()
+        for r in e.state["robots"].values():
+            if r["lift_stage"] != "ALIGHTING" or not r["lift_id"]:
+                continue
+            seen += 1
+            l = next(x for x in L["lifts"] if x["id"] == r["lift_id"])
+            cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
+            x = r["position"][0]; z = r["position"][2]
+            assert x <= cx + 0.1, f"{r['id']} moved east inside shaft ({x:.2f},{z:.2f})"
+            if x > cx - 1.4:
+                assert abs(z - cz) <= 1.15, f"{r['id']} crossing side fence ({x:.2f},{z:.2f})"
+    assert seen > 0
+
+
 def test_lift_lobby_congestion_resolves():
     """出口節點與排隊線分開：雙向大量跨樓任務不會在電梯口互卡（修正 R11/R20 卡死 bug）。"""
     e = SimEngine(L, seed=5)

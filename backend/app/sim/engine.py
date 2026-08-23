@@ -25,6 +25,7 @@ SIM = dict(
     IDLE_TO_PARK_TICKS=300, KPI_EVERY=10, SERIES_EVERY=600, EVENT_RING=500, ZONE_CAPACITY=6,
     # Phase 7：虛擬 LiDAR 與局部避障（與 TS 引擎相同）
     LIDAR_RANGE=4.0, LIDAR_FOV=math.pi * 1.5, PERC_STOP=1.7, PERC_SLOW=2.8, PERC_LOOKAHEAD=3, PERC_EVENT_TICKS=200,
+    LIFT_SEP=0.6,   # 電梯口「對接模式」間距 (m)：排隊遞補/進出轎廂的低速微移動用，比走道 MIN_SEP 緊
     LIFT_DOOR_TICKS=12, LIFT_TRAVEL_TICKS=60, LIFT_LEVEL_TICKS=5, LIFT_COOLDOWN_TICKS=20,
     LIFT_BOARD_SPEED=0.6, LIFT_QUEUE_SPEED=0.9, LIFT_RETRY_TICKS=50, LIFT_XFLOOR_PENALTY_M=40,
 )
@@ -417,14 +418,20 @@ class SimEngine:
     def _lift_cabin(l: dict[str, Any]) -> tuple[float, float]:
         return (l["cell"][0] + 0.5, l["cell"][1] + 0.5)
 
+    def _lift_gate_point(self, l: dict[str, Any], exit_: tuple[float, float]) -> tuple[float, float]:
+        """閘門通過點（round-8b）：門在井道西面（排隊側）。x 固定在圍籬外 0.3 m，z 依出口方向偏向門洞邊緣
+        （±0.95，門洞半寬 ~1.12），使「轎廂→閘門」與「閘門→出口」兩段都與排隊格保持 MIN_SEP 以上。"""
+        cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
+        dz = max(-0.95, min(0.95, exit_[1] - cz))
+        return (cx - 1.7, cz + dz)
+
     def _pick_lift_exit(self, l: dict[str, Any], floor: int, skip: int = 0) -> tuple[float, float]:
-        """出口節點（規格書 §6.4）：與排隊線分開，且「轎廂到出口的直線」避開所有站著的機器人；
-        一次選定（sticky），被擋太久才換 —— 與 TS 相同。"""
+        """出口節點（規格書 §6.4）：與排隊線分開；出轎廂走「門軸 → 閘門 → 出口」兩段路（round-8b），
+        兩段都必須避開所有站著的機器人；一次選定（sticky），被擋太久才換 —— 與 TS 相同。"""
         grid = self.grids[floor]
         cabin = self._lift_cabin(l)
 
-        def clear(to: tuple[float, float]) -> bool:
-            ax, az = cabin; bx, bz = to
+        def seg_clear(ax: float, az: float, bx: float, bz: float) -> bool:
             dx = bx - ax; dz = bz - az; len2 = dx * dx + dz * dz or 1.0
             for o in self.state["robots"].values():
                 if o["floor"] != floor or o["lift_id"] or o["velocity"] > 0.1:
@@ -435,8 +442,13 @@ class SimEngine:
                     return False
             return True
 
+        def clear(to: tuple[float, float]) -> bool:
+            g = self._lift_gate_point(l, to)   # 兩段都要淨空：轎廂→閘門、閘門→出口
+            return seg_clear(cabin[0], cabin[1], g[0], g[1]) and seg_clear(g[0], g[1], to[0], to[1])
+
         ok = []
-        for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-1, -2), (-1, 2), (-2, 0)):
+        # 候選全在西側（門那一面）：不再有貼著井道角的 (-1, ±2)（round-8b）
+        for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
             c = l["cell"][0] + dc; r_ = l["cell"][1] + dr
             if not is_walkable(grid, c, r_):
                 continue
@@ -455,11 +467,13 @@ class SimEngine:
             r["velocity"] = 0; return True
         step = min(dist, speed * SIM["TICK_S"])
         nx = r["position"][0] + (dx / dist) * step; nz = r["position"][2] + (dz / dist) * step
-        for oid, o in self.state["robots"].items():   # 排隊/進出轎廂也維持 MIN_SEP
+        # 排隊/進出轎廂維持物理間距，但用「對接模式」的 LIFT_SEP（0.6 m）：低速微移動
+        # 若沿用走道的 MIN_SEP 0.9，門軸走廊會和排隊線在 0.9 m 標距上互相卡死（BOARDING ↔ TO_LIFT 對峙）
+        for oid, o in self.state["robots"].items():
             if oid == r["id"] or o["floor"] != fl or o["lift_id"]:
                 continue
             dn = math.hypot(nx - o["position"][0], nz - o["position"][2])
-            if dn < SIM["MIN_SEP"] and dn < math.hypot(r["position"][0] - o["position"][0], r["position"][2] - o["position"][2]):
+            if dn < SIM["LIFT_SEP"] and dn < math.hypot(r["position"][0] - o["position"][0], r["position"][2] - o["position"][2]):
                 r["velocity"] = 0; return False
         r["position"][0] = nx; r["position"][2] = nz
         r["heading"] = math.atan2(dz, dx); r["velocity"] = speed
@@ -624,7 +638,11 @@ class SimEngine:
             tf = rt.pending["floor"]   # 出口與間距全用目的樓層計算；r["floor"] 到抵達出口那一刻才翻
             if rt.lift_exit is None:
                 rt.lift_exit = self._pick_lift_exit(lay, tf); rt.lift_blocked_ticks = 0
-            arrived = self._micro_move(r, rt.lift_exit, SIM["LIFT_BOARD_SPEED"], tf)
+            # 兩段式出轎廂（round-8b）：先沿門軸穿出西側閘門，過了門檻才轉向出口節點 —— 不會斜穿護網/柱子
+            gate = self._lift_gate_point(lay, rt.lift_exit)
+            through_gate = r["position"][0] <= gate[0] + 0.05
+            leg_arrived = self._micro_move(r, rt.lift_exit if through_gate else gate, SIM["LIFT_BOARD_SPEED"], tf)
+            arrived = through_gate and leg_arrived
             if not arrived and r["velocity"] == 0:
                 rt.lift_blocked_ticks += 1
                 if rt.lift_blocked_ticks % 40 == 0:   # 被擋 4 秒換一個出口
@@ -949,7 +967,9 @@ class SimEngine:
             elif rt.wait_ticks >= SIM["WAIT_BACKOFF_TICKS"]:
                 self._back_off(r, rt)
             return
-        rt.wait_ticks = 0
+        # 注意：wait_ticks 不在這裡歸零 —— 要等「真的移動了」才歸零（round-8b）。
+        # 否則純物理間距擋停（下方 MIN_SEP 檢查）每 tick 被重設成 1，永遠到不了 back-off 門檻，
+        # 兩台在窄走道 0.9 m 對峙就永久卡死。
         if entering:
             self.occupancy[(fl, ncell[0], ncell[1])] = r["id"]   # 立刻預約下一格
             if ncell[0] != my_cell[0] and ncell[1] != my_cell[1]:   # 斜向：兩個正交鄰格也預約
@@ -982,6 +1002,7 @@ class SimEngine:
                         self._back_off(r, rt)
                     return
             pos[0] = nx; pos[2] = nz
+            rt.wait_ticks = 0   # 真的動了才算解除阻塞
         r["stats"]["distance_m"] += step_len
         # 交通熱圖（每樓一份）
         T = self.traffic.get(fl); TS_ = self.traffic_short.get(fl)

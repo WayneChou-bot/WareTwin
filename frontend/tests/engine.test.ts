@@ -390,3 +390,26 @@ describe("lift shaft as nav obstacle（round-8）", () => {
     }
   }, 180000);
 });
+
+describe("alighting exits through the gate（round-8b）", () => {
+  it("出轎廂一律沿門軸先出西側閘門：井道範圍內不越側牆、絕不往東（柱子/護網）走", () => {
+    const eng = new SimEngine(layout, { seed: 17 });
+    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
+    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" });
+    eng.createTask({ type: "REPLENISH", priority: "CRITICAL", source: "INBOUND-1", destination: "SHELF-M30" });
+    let seen = 0;
+    for (let i = 0; i < 40000; i++) {
+      eng.step();
+      for (const r of Object.values(eng.state.robots)) {
+        if (r.lift_stage !== "ALIGHTING" || !r.lift_id) continue;
+        seen++;
+        const l = layout.lifts.find((x) => x.id === r.lift_id)!;
+        const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
+        const [x, , ] = [r.position[0], 0, 0]; const z = r.position[2];
+        if (x > cx + 0.1) throw new Error(`${r.id} moved east inside shaft (${x.toFixed(2)},${z.toFixed(2)})`);
+        if (x > cx - 1.4 && Math.abs(z - cz) > 1.15) throw new Error(`${r.id} crossing side fence (${x.toFixed(2)},${z.toFixed(2)})`);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  }, 180000);
+});
