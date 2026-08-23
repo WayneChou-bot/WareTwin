@@ -104,10 +104,10 @@ export class SimEngine {
   readonly grid: NavGrid;
   readonly grids: Record<number, NavGrid>;
   state: TwinState;
-  /** 長期交通累計（cols*rows，衰減極慢）：HEATMAP 用、也當 A* 的擁塞成本 */
-  traffic: Float32Array;
-  /** 短期交通（衰減快，約 20 s 記憶）：TRAFFIC VIEW 用 */
-  trafficShort: Float32Array;
+  /** 長期交通累計（每樓一份；衰減極慢）：HEATMAP 用、也當 A* 的擁塞成本 */
+  traffic: Record<number, Float32Array>;
+  /** 短期交通（每樓一份；衰減快，約 20 s 記憶）：TRAFFIC VIEW 用 */
+  trafficShort: Record<number, Float32Array>;
   private rng: () => number;
   private rt: Record<string, RobotRt> = {};
   private loc: Record<string, LayoutLocation>;
@@ -130,8 +130,9 @@ export class SimEngine {
     this.grid = buildNavGrid(layout, 1);
     this.grids = { 1: this.grid };
     for (const f of layout.floors ?? []) if (f.id !== 1) this.grids[f.id] = buildNavGrid(layout, f.id);
-    this.traffic = new Float32Array(this.grid.cols * this.grid.rows);
-    this.trafficShort = new Float32Array(this.grid.cols * this.grid.rows);
+    const n = this.grid.cols * this.grid.rows;
+    this.traffic = {}; this.trafficShort = {};
+    for (const f of layout.floors ?? [{ id: 1 }]) { this.traffic[f.id] = new Float32Array(n); this.trafficShort[f.id] = new Float32Array(n); }
     this.loc = Object.fromEntries(layout.locations.map((l) => [l.id, l]));
     const seed = opts.seed ?? 42;
     this.rng = mulberry32(seed);
@@ -166,7 +167,7 @@ export class SimEngine {
         id: l.id, state: "IDLE" as const, floor: 1, target_floor: null, y: 0,
         door_f1: "CLOSED" as const, door_f2: "CLOSED" as const,
         occupant: null, reserved_by: null, queue: { "1": [], "2": [] } as Record<string, string[]>,
-        until_tick: 0, fault: false, trips: 0, busy_ticks: 0, wait_total_ticks: 0, wait_n: 0,
+        until_tick: 0, fault: false, fault_remaining: 0, trips: 0, busy_ticks: 0, wait_total_ticks: 0, wait_n: 0,
       }])),
       zones: Object.fromEntries(L.zones.map((z) => [z.id, { id: z.id, status: "NORMAL" as const, robot_count: 0, congestion: 0, blocked_reason: null, blocked_since_tick: null }])),
       conveyors: Object.fromEntries(L.conveyors.map((c) => [c.id, { id: c.id, status: "RUNNING" as const, speed_mps: c.speed_mps, items_on_belt: 4, throughput_per_min: 4 }])),
@@ -202,7 +203,7 @@ export class SimEngine {
       case "CAMERA_OFFLINE": { const c = S.cameras[targetId]; if (c) { c.status = "ONLINE"; if (Object.values(S.cameras).every((x) => x.status === "ONLINE")) S.subsystems.CCTV = "NORMAL"; this.emit("CAMERA_STATUS_CHANGED", "CAMERA", "INFO", `${c.id} online`, { camera_id: c.id }); } break; }
       case "HUMAN_INTRUSION": { for (const pid in S.people) if (S.people[pid].zone === targetId) S.people[pid].expires_tick = S.sim.tick; break; }
       case "TRAFFIC_CONGESTION": { this.congestedZones.delete(targetId); this.emit("ZONE_UNBLOCKED", "USER", "INFO", `Zone ${targetId} traffic restriction lifted`, { zone_id: targetId }); break; }
-      case "LIFT_FAULT": { const L = S.lifts[targetId]; if (L && L.fault) { L.fault = false; this.resolveAlert(`lift-${targetId}`); this.emit("LIFT_FAULT", "LIFT", "INFO", `${targetId} restored — resuming`, {}); } break; }
+      case "LIFT_FAULT": { const L = S.lifts[targetId]; if (L && L.fault) { L.fault = false; L.until_tick = S.sim.tick + L.fault_remaining; L.fault_remaining = 0; this.resolveAlert(`lift-${targetId}`); this.emit("LIFT_FAULT", "LIFT", "INFO", `${targetId} restored — resuming`, {}); } break; }
       default: break;
     }
   }
@@ -278,13 +279,24 @@ export class SimEngine {
       const src = this.loc[task.source]; if (!src) { task.status = "FAILED"; continue; }
       const srcFloor = src.floor ?? 1;
       const cands: DecisionCandidate[] = idle.map((r) => {
-        // 跨樓層：直線距離 + 電梯等效懲罰（排程時偏好同樓層的機器人）
-        const d = Math.hypot(r.position[0] - src.access_point[0], r.position[2] - src.access_point[1]) + (r.floor !== srcFloor ? SIM.LIFT_XFLOOR_PENALTY_M : 0);
+        // 跨樓層：地面距離 + 固定懲罰 + 「實際電梯狀態」的預估等待（排隊長度/忙碌/所在樓層），換算成等效距離
+        const flat = Math.hypot(r.position[0] - src.access_point[0], r.position[2] - src.access_point[1]);
+        let d = flat, liftInfo: { id: string; waitS: number } | null = null;
+        if (r.floor !== srcFloor) {
+          const best = [...this.layout.lifts].map((l) => ({ l, cost: this.liftCost(r, l) })).sort((a, b) => a.cost - b.cost || a.l.id.localeCompare(b.l.id))[0];
+          const waitS = best && best.cost < Infinity
+            ? Math.round((best.cost - Math.hypot(r.position[0] - (best.l.cell[0] - 1.5), r.position[2] - (best.l.cell[1] + 0.5)) / (SIM.MAX_SPEED * 0.8)) * 10) / 10
+            : 60;
+          liftInfo = { id: best && best.cost < Infinity ? best.l.id : "—", waitS };
+          d = flat + SIM.LIFT_XFLOOR_PENALTY_M + waitS * SIM.MAX_SPEED * 0.8;
+        }
         const zone = r.zone ? S.zones[r.zone] : null;
         const cong = zone ? zone.congestion : 0;
         const workload: DecisionCandidate["workload"] = r.stats.tasks_completed > 8 ? "HIGH" : r.stats.tasks_completed > 4 ? "MEDIUM" : "LOW";
         const score = weights.distance * (1 - Math.min(1, d / 120)) + weights.battery * (r.battery / 100) + weights.workload * (workload === "LOW" ? 1 : workload === "MEDIUM" ? 0.6 : 0.2) + weights.congestion * (1 - cong) + weights.health * (r.health / 100);
-        const reasons: string[] = [`${d.toFixed(0)}m from task${r.floor !== srcFloor ? " (via lift)" : ""}`, `${r.battery.toFixed(0)}% battery`, `${workload.toLowerCase()} workload`];
+        const reasons: string[] = liftInfo
+          ? [`${flat.toFixed(0)}m ground`, `+${SIM.LIFT_XFLOOR_PENALTY_M}m cross-floor via ${liftInfo.id}`, `est. lift wait ${liftInfo.waitS}s`, `${r.battery.toFixed(0)}% battery`]
+          : [`${d.toFixed(0)}m from task`, `${r.battery.toFixed(0)}% battery`, `${workload.toLowerCase()} workload`];
         if (cong < 0.3) reasons.push("no route congestion");
         return { robot_id: r.id, score: Math.round(score * 1000) / 1000, distance_m: Math.round(d), battery: Math.round(r.battery), workload, congestion: Math.round(cong * 100) / 100, health: r.health, reasons, rejected_reason: null };
       }).sort((a, b) => b.score - a.score);
@@ -364,7 +376,8 @@ export class SimEngine {
   }
 
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
-  private microMove(r: RobotState, to: [number, number], speed: number): boolean {
+  private microMove(r: RobotState, to: [number, number], speed: number, floorOverride: number | null = null): boolean {
+    const fl = floorOverride ?? r.floor;
     const dx = to[0] - r.position[0], dz = to[1] - r.position[2];
     const dist = Math.hypot(dx, dz);
     if (dist < 0.05) { r.velocity = 0; return true; }
@@ -373,7 +386,7 @@ export class SimEngine {
     // 排隊/進出轎廂也要維持物理間距（MIN_SEP），不能疊在前一台上
     for (const id in this.state.robots) {
       if (id === r.id) continue; const o = this.state.robots[id];
-      if (o.floor !== r.floor || o.lift_id) continue;
+      if (o.floor !== fl || o.lift_id) continue;
       const dn = Math.hypot(nx - o.position[0], nz - o.position[2]);
       if (dn < SIM.MIN_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; return false; }
     }
@@ -429,7 +442,7 @@ export class SimEngine {
           }
           break;
         }
-        case "MOVING_UP": case "MOVING_DOWN": { L.state = "LEVELING"; L.until_tick = tick + SIM.LIFT_LEVEL_TICKS; break; }
+        case "MOVING_UP": case "MOVING_DOWN": { L.state = "LEVELING"; L.until_tick = tick + SIM.LIFT_LEVEL_TICKS; this.emit("LIFT_LEVELING", "LIFT", "LOW", `${lid} leveling at Floor ${L.target_floor}`, {}); break; }
         case "LEVELING": {
           L.floor = L.target_floor!; L.target_floor = null; L.y = this.elevOf(L.floor);
           L.state = L.occupant ? "DOOR_OPENING_AT_DESTINATION" : "DOOR_OPENING";
@@ -448,6 +461,7 @@ export class SimEngine {
           if (!rr || rr.status === "OFFLINE") {          // 預約者消失 → 關門回 IDLE
             if (L.reserved_by) this.releaseRobotFromLift(L.reserved_by);
             L.door_f1 = "CLOSED"; L.door_f2 = "CLOSED"; L.state = "COOLDOWN"; L.until_tick = tick + SIM.LIFT_COOLDOWN_TICKS;
+            this.emit("LIFT_COOLDOWN_STARTED", "LIFT", "LOW", `${lid} cooldown`, {});
           }
           break;                                          // occupant 由 robot 端設定 → DOOR_CLOSING
         }
@@ -458,7 +472,7 @@ export class SimEngine {
             L.target_floor = dest; L.state = dest === 2 ? "MOVING_UP" : "MOVING_DOWN"; L.floor = null; L.until_tick = tick + SIM.LIFT_TRAVEL_TICKS;
             L.trips++;
             this.emit("LIFT_DEPARTED", "LIFT", "INFO", `${lid} departed → Floor ${dest} (${L.occupant})`, { robot_id: L.occupant });
-          } else { L.state = "COOLDOWN"; L.until_tick = tick + SIM.LIFT_COOLDOWN_TICKS; }
+          } else { L.state = "COOLDOWN"; L.until_tick = tick + SIM.LIFT_COOLDOWN_TICKS; this.emit("LIFT_COOLDOWN_STARTED", "LIFT", "LOW", `${lid} cooldown`, {}); }
           break;
         }
         case "DOOR_OPENING_AT_DESTINATION": {
@@ -468,7 +482,7 @@ export class SimEngine {
           break;
         }
         case "ALIGHTING": break;                          // robot 端清 occupant → DOOR_CLOSING_AFTER_EXIT
-        case "DOOR_CLOSING_AFTER_EXIT": { L.door_f1 = "CLOSED"; L.door_f2 = "CLOSED"; L.state = "COOLDOWN"; L.until_tick = tick + SIM.LIFT_COOLDOWN_TICKS; break; }
+        case "DOOR_CLOSING_AFTER_EXIT": { L.door_f1 = "CLOSED"; L.door_f2 = "CLOSED"; L.state = "COOLDOWN"; L.until_tick = tick + SIM.LIFT_COOLDOWN_TICKS; this.emit("LIFT_COOLDOWN_STARTED", "LIFT", "LOW", `${lid} cooldown`, {}); break; }
         case "COOLDOWN": { L.state = "IDLE"; break; }
         default: break;
       }
@@ -502,7 +516,7 @@ export class SimEngine {
         // 隊首 + 我的預約 + 門開著 → 開始上車
         if (pos === 0 && L.reserved_by === r.id && L.state === "BOARDING" && L.floor === r.floor) {
           this.setLiftStage(r, rt, "BOARDING");
-          this.emit("ROBOT_STATE_CHANGED", "LIFT", "INFO", `${r.id} boarding ${rt.liftId} → Floor ${rt.pending!.floor}`, { robot_id: r.id });
+          this.emit("ROBOT_BOARDING_STARTED", "LIFT", "INFO", `${r.id} boarding ${rt.liftId} → Floor ${rt.pending!.floor}`, { robot_id: r.id });
         }
         return true;
       }
@@ -522,18 +536,21 @@ export class SimEngine {
         r.velocity = 0;                                   // 位置固定在轎廂中心，y 由前端跟著 L.y 畫
         const c = this.liftCabin(lay); r.position[0] = c[0]; r.position[2] = c[1];
         if (L.state === "ALIGHTING" && L.floor === rt.pending!.floor) {
-          r.floor = rt.pending!.floor;                    // 門已開，開始下車（進入目的樓層網格）
+          // 門已開 → 開始下車。樓層【還不能】翻（規格 §2.2：完全離開轎廂/門區才切換）
           this.setLiftStage(r, rt, "ALIGHTING");
+          this.emit("ROBOT_ALIGHTING_STARTED", "LIFT", "INFO", `${r.id} alighting ${rt.liftId} at Floor ${L.floor}`, { robot_id: r.id });
         }
         return true;
       }
       case "ALIGHTING": {
-        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, r.floor); rt.liftBlockedTicks = 0; }
-        const arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED);
+        const tf = rt.pending!.floor;                      // 出口與間距全用目的樓層計算；r.floor 到抵達出口那一刻才翻
+        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; }
+        const arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED, tf);
         if (!arrived && r.velocity === 0) {
-          if (++rt.liftBlockedTicks % 40 === 0) rt.liftExit = this.pickLiftExit(lay, r.floor, rt.liftBlockedTicks / 40);   // 被擋 4 秒換一個出口
+          if (++rt.liftBlockedTicks % 40 === 0) rt.liftExit = this.pickLiftExit(lay, tf, rt.liftBlockedTicks / 40);   // 被擋 4 秒換一個出口
         } else if (r.velocity > 0) rt.liftBlockedTicks = 0;
         if (arrived) {
+          r.floor = tf;                                    // ✅ 完全離開門區的這一刻才進入目的樓層網格
           L.occupant = null; r.lift_id = null;
           L.state = "DOOR_CLOSING_AFTER_EXIT"; L.until_tick = tick + SIM.LIFT_DOOR_TICKS;
           this.emit("ROBOT_EXITED", "LIFT", "INFO", `${r.id} exited ${rt.liftId} on Floor ${r.floor}`, { robot_id: r.id });
@@ -670,7 +687,7 @@ export class SimEngine {
         // 以目前被佔用的格為臨時障礙重新規劃
         if (rt.target) {
           const blocked = this.blockedCells(r.id, r.floor);
-          const p = astar(this.grids[r.floor], toCell(r.position[0], r.position[2]), rt.target, { blocked, costMap: r.floor === 1 ? this.congestionCost() : undefined });
+          const p = astar(this.grids[r.floor], toCell(r.position[0], r.position[2]), rt.target, { blocked, costMap: this.congestionCost(r.floor) });
           if (p) { r.path = p; r.path_index = 0; rt.waitTicks = 0; this.emit("ROUTE_REPLANNED", "PLANNER", "LOW", `${r.id} rerouted (${p.length} cells)`, { robot_id: r.id, task_id: r.current_task_id ?? undefined }); }
         }
         this.setFsm(r, rt.phase === "TO_DEST" ? "TRANSPORTING" : rt.phase === "TO_CHARGER" ? "GOING_TO_CHARGE" : rt.phase === "TO_PARK" ? "IDLE" : "NAVIGATING");
@@ -744,13 +761,14 @@ export class SimEngine {
       if (!lift) { rt.liftId = this.layout.lifts[0]?.id ?? null; this.setLiftStage(r, rt, "TO_LIFT"); rt.target = null; r.path = []; r.path_index = 0; rt.liftRetryTick = this.state.sim.tick + SIM.LIFT_RETRY_TICKS; return; }
       rt.liftId = lift.id;
       this.setLiftStage(r, rt, "TO_LIFT");
+      this.emit("LIFT_REQUESTED", "LIFT", "LOW", `${r.id} requested ${lift.id} (F${r.floor} → F${tf})`, { robot_id: r.id });
       const L = this.state.lifts[lift.id];
       const slotIdx = Math.min(L.queue[String(r.floor)].length, 2);
       const sp = this.liftSlot(lift, slotIdx);
       const start = toCell(r.position[0], r.position[2]);
       const goal: GridCell = [Math.floor(sp[0]), Math.floor(sp[1])];
       const grid = this.grids[r.floor];
-      const path = astar(grid, start, goal, { blocked: this.blockedCells(r.id, r.floor), costMap: r.floor === 1 ? this.congestionCost() : undefined }) ?? astar(grid, start, goal) ?? [];
+      const path = astar(grid, start, goal, { blocked: this.blockedCells(r.id, r.floor), costMap: this.congestionCost(r.floor) }) ?? astar(grid, start, goal) ?? [];
       r.path = path; r.path_index = 0; rt.target = goal; rt.phase = phase; rt.goalLoc = locId; rt.waitTicks = 0; rt.backingOff = false; rt.resumePoint = null;
       r.destination = locId;
       if (path.length === 0 && (start[0] !== goal[0] || start[1] !== goal[1])) rt.target = null;
@@ -760,7 +778,7 @@ export class SimEngine {
     const start = toCell(r.position[0], r.position[2]);
     const grid = this.grids[r.floor];
     const goal = (locId ? this.freeServiceCell(r, point) : null) ?? nearestWalkable(grid, point[0], point[1]);
-    const path = astar(grid, start, goal, { blocked: this.blockedCells(r.id, r.floor), costMap: r.floor === 1 ? this.congestionCost() : undefined }) ?? astar(grid, start, goal) ?? [];
+    const path = astar(grid, start, goal, { blocked: this.blockedCells(r.id, r.floor), costMap: this.congestionCost(r.floor) }) ?? astar(grid, start, goal) ?? [];
     r.path = path; r.path_index = 0; rt.target = goal; rt.phase = phase; rt.goalLoc = locId; rt.waitTicks = 0; rt.backingOff = false; rt.resumePoint = null;
     r.destination = locId;
     if (path.length === 0 && (start[0] !== goal[0] || start[1] !== goal[1])) { rt.target = null; }
@@ -853,7 +871,7 @@ export class SimEngine {
     }
     r.stats.distance_m += stepLen;
     // 交通熱圖
-    if (r.floor === 1) { const ci = myCell[1] * this.grid.cols + myCell[0]; if (ci >= 0 && ci < this.traffic.length) { this.traffic[ci] += 1; this.trafficShort[ci] += 1; } }
+    { const ci = myCell[1] * this.grid.cols + myCell[0]; const T = this.traffic[r.floor], TS = this.trafficShort[r.floor]; if (T && ci >= 0 && ci < T.length) { T[ci] += 1; TS[ci] += 1; } }
     if (dist - stepLen < 0.08) {
       r.path_index++;
       this.occupancy.set(cellKey(next[0], next[1]), r.id);
@@ -977,13 +995,15 @@ export class SimEngine {
     for (const zid of this.blockedZones) { const z = this.layout.zones.find((zz) => zz.id === zid); if (!z || (z.floor ?? 1) !== floor) continue; const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]); for (let c = Math.floor(Math.min(...xs)); c < Math.max(...xs); c++) for (let r = Math.floor(Math.min(...zs)); r < Math.max(...zs); r++) s.add(cellKey(c, r)); }
     return s;
   }
-  private congestionCost(): Float32Array | undefined {
-    // 用交通熱圖當作額外成本，讓機器人自然分散到不同走道；注入的交通擁塞 zone 再加一層高成本
-    const out = new Float32Array(this.traffic.length);
-    let max = 0; for (let i = 0; i < this.traffic.length; i++) if (this.traffic[i] > max) max = this.traffic[i];
-    if (max < 1 && this.congestedZones.size === 0) return undefined;
-    if (max >= 1) for (let i = 0; i < out.length; i++) out[i] = (this.traffic[i] / max) * 0.8;
-    for (const [zid, cz] of this.congestedZones) { const z = this.layout.zones.find((zz) => zz.id === zid); if (!z) continue; const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]); for (let c = Math.floor(Math.min(...xs)); c < Math.max(...xs); c++) for (let r = Math.floor(Math.min(...zs)); r < Math.max(...zs); r++) out[r * this.grid.cols + c] += 3 * cz.level; }
+  private congestionCost(floor = 1): Float32Array | undefined {
+    // 用該樓層的交通熱圖當額外成本，讓機器人自然分散到不同走道；注入的交通擁塞 zone 再加一層高成本
+    const T = this.traffic[floor]; if (!T) return undefined;
+    const out = new Float32Array(T.length);
+    let max = 0; for (let i = 0; i < T.length; i++) if (T[i] > max) max = T[i];
+    const zonesOnFloor = [...this.congestedZones.keys()].filter((zid) => (this.layout.zones.find((z) => z.id === zid)?.floor ?? 1) === floor);
+    if (max < 1 && zonesOnFloor.length === 0) return undefined;
+    if (max >= 1) for (let i = 0; i < out.length; i++) out[i] = (T[i] / max) * 0.8;
+    for (const zid of zonesOnFloor) { const cz = this.congestedZones.get(zid)!; const z = this.layout.zones.find((zz) => zz.id === zid)!; const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]); for (let c = Math.floor(Math.min(...xs)); c < Math.max(...xs); c++) for (let r = Math.floor(Math.min(...zs)); r < Math.max(...zs); r++) out[r * this.grid.cols + c] += 3 * cz.level; }
     return out;
   }
   /** 注入的交通擁塞：zone 內速度上限比例 */
@@ -991,7 +1011,10 @@ export class SimEngine {
     for (const [zid, cz] of this.congestedZones) { const z = this.layout.zones.find((zz) => zz.id === zid); if (!z || (z.floor ?? 1) !== floor) continue; const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]); if (cell[0] >= Math.min(...xs) && cell[0] < Math.max(...xs) && cell[1] >= Math.min(...zs) && cell[1] < Math.max(...zs)) return 1 - 0.7 * cz.level; }
     return 1;
   }
-  private decayTraffic() { if (this.state.sim.tick % 5 === 0) for (let i = 0; i < this.traffic.length; i++) { this.traffic[i] *= 0.9985; this.trafficShort[i] *= 0.975; } }
+  private decayTraffic() {
+    if (this.state.sim.tick % 5 !== 0) return;
+    for (const f in this.traffic) { const T = this.traffic[f], TS = this.trafficShort[f]; for (let i = 0; i < T.length; i++) { T[i] *= 0.9985; TS[i] *= 0.975; } }
+  }
 
   // ─────────────────────────────────────────────────────────
   // 電池與充電
@@ -1143,6 +1166,7 @@ export class SimEngine {
         case "LIFT_FAULT": {
           const L = S.lifts[inj.lift_id]; if (!L || L.fault) break;
           L.fault = true;
+          L.fault_remaining = Math.max(0, L.until_tick - now);   // 凍結計時器：解除時從剩餘進度續跑，平台不瞬移
           // 尚未上車的預約/排隊者會在下個 tick 由 reRouteLift 改走另一座；已在轎廂者停在原地（不得瞬移）
           this.emit("LIFT_FAULT", "LIFT", L.occupant ? "CRITICAL" : "HIGH", `${inj.lift_id} FAULT${L.occupant ? ` — ${L.occupant} inside, platform stalled` : ""}`, { robot_id: L.occupant ?? undefined });
           this.raiseAlert(`lift-${inj.lift_id}`, L.occupant ? "CRITICAL" : "HIGH", `${inj.lift_id}  Fault`, L.occupant ? `Platform stalled with ${L.occupant} aboard` : "Out of service", {});

@@ -13,14 +13,19 @@ def _boot(seed=7):
 
 
 def test_robot_cannot_change_floor_without_lift():
+    """翻樓層只能發生在 ALIGHTING 走完、離開轎廂門區之後（round-5 P1：不得在轎廂內就翻）"""
     e, t = _boot()
     prev = {rid: r["floor"] for rid, r in e.state["robots"].items()}
+    stage_at = {rid: r["lift_stage"] for rid, r in e.state["robots"].items()}
+    cabins = [(l["cell"][0] + 0.5, l["cell"][1] + 0.5) for l in L["lifts"]]
     for _ in range(24000):
         e.step()
         for rid, r in e.state["robots"].items():
             if r["floor"] != prev[rid]:
-                assert r["lift_stage"] == "ALIGHTING", f"{rid} changed floor outside lift flow"
-            prev[rid] = r["floor"]
+                assert stage_at[rid] == "ALIGHTING", f"{rid} changed floor outside lift flow"
+                min_cab = min(math.hypot(r["position"][0] - c[0], r["position"][2] - c[1]) for c in cabins)
+                assert min_cab > 1.4, f"{rid} flipped floor while still at the cabin ({min_cab:.2f} m)"
+            prev[rid] = r["floor"]; stage_at[rid] = r["lift_stage"]
         if t["status"] == "COMPLETED":
             break
     assert t["status"] == "COMPLETED"
@@ -79,6 +84,34 @@ def test_lift_fault_triggers_alternative_selection_and_no_teleport():
     e.clear_injection("LIFT_FAULT", lift_id)
     for _ in range(24000):
         e.step()
+        if t["status"] == "COMPLETED":
+            break
+    assert t["status"] == "COMPLETED"
+
+
+def test_lift_fault_clear_resumes_from_frozen_height_no_teleport():
+    """解除故障後平台從凍結高度續跑，不會單 tick 瞬移（round-5 P1：fault_remaining 凍結計時器）"""
+    e, t = _boot()
+    lift_id = None
+    for _ in range(30000):
+        e.step()
+        lift_id = next((lid for lid, L_ in e.state["lifts"].items() if L_["state"] in ("MOVING_UP", "MOVING_DOWN")), None)
+        if lift_id:
+            break
+    assert lift_id, "no lift ever moved"
+    Lst = e.state["lifts"][lift_id]
+    e.inject({"kind": "LIFT_FAULT", "lift_id": lift_id})
+    e.step()   # 套用注入
+    y_frozen = Lst["y"]
+    for _ in range(200):
+        e.step()
+        assert Lst["y"] == y_frozen, "platform moved while faulted"
+    e.clear_injection("LIFT_FAULT", lift_id)
+    prev_y = Lst["y"]
+    for _ in range(24000):
+        e.step()
+        assert abs(Lst["y"] - prev_y) < 0.5, "platform teleported after fault clear"
+        prev_y = Lst["y"]
         if t["status"] == "COMPLETED":
             break
     assert t["status"] == "COMPLETED"

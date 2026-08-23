@@ -127,9 +127,10 @@ describe("lift state machine (spec §9–§14)", () => {
     const t = eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
     return { eng, t };
   };
-  it("lift never moves with an open gate; robot never changes floor without riding", () => {
+  it("lift never moves with an open gate; floor flips only after fully exiting the cabin", () => {
     const { eng, t } = boot();
-    const floorAt: Record<string, number> = {};
+    const floorAt: Record<string, number> = {}; const stageAt: Record<string, string | null> = {};
+    const cabins = eng.state ? (eng as unknown as { layout: { lifts: Array<{ cell: [number, number] }> } }).layout.lifts.map((l) => [l.cell[0] + 0.5, l.cell[1] + 0.5]) : [];
     for (let i = 0; i < 24000 && t.status !== "COMPLETED"; i++) {
       eng.step();
       for (const L of Object.values(eng.state.lifts)) {
@@ -140,12 +141,43 @@ describe("lift state machine (spec §9–§14)", () => {
       }
       for (const r of Object.values(eng.state.robots)) {
         const prev = floorAt[r.id] ?? r.floor;
-        if (r.floor !== prev) expect(r.lift_stage, `${r.id} changed floor outside lift flow`).toBe("ALIGHTING");
-        floorAt[r.id] = r.floor;
+        if (r.floor !== prev) {
+          // 只能在 ALIGHTING 流程結束時翻樓層，且此刻必須已離開轎廂（距任一轎廂中心 > 1.4 m）
+          expect(stageAt[r.id], `${r.id} changed floor outside lift flow`).toBe("ALIGHTING");
+          const minCab = Math.min(...cabins.map(([cx, cz]) => Math.hypot(r.position[0] - cx, r.position[2] - cz)));
+          expect(minCab, `${r.id} flipped floor while still in the cabin`).toBeGreaterThan(1.4);
+        }
+        floorAt[r.id] = r.floor; stageAt[r.id] = r.lift_stage;
       }
     }
     expect(t.status).toBe("COMPLETED");
   }, 60000);
+  it("clearing a lift fault resumes the platform from the frozen height — no teleport", () => {
+    const { eng, t } = boot();
+    // 等到有人搭上電梯且開始移動
+    let lid: string | null = null;
+    for (let i = 0; i < 40000 && !lid; i++) {
+      eng.step();
+      for (const L of Object.values(eng.state.lifts)) if (L.occupant && (L.state === "MOVING_UP" || L.state === "MOVING_DOWN")) lid = L.id;
+    }
+    expect(lid).toBeTruthy();
+    const L = eng.state.lifts[lid!];
+    // 移動途中打壞
+    for (let i = 0; i < 20 && (L.state === "MOVING_UP" || L.state === "MOVING_DOWN") && Math.abs(L.y) < 4; i++) eng.step();
+    eng.inject({ kind: "LIFT_FAULT", lift_id: lid! });
+    eng.step();
+    const frozenY = L.y;
+    for (let i = 0; i < 200; i++) { eng.step(); expect(L.y).toBe(frozenY); }   // 故障期間高度凍結
+    eng.clearInjection("LIFT_FAULT", lid!);
+    let prevY = L.y;
+    for (let i = 0; i < 2000; i++) {
+      eng.step();
+      expect(Math.abs(L.y - prevY), "platform teleported after fault clear").toBeLessThan(0.5);   // 單 tick 位移必須平滑
+      prevY = L.y;
+    }
+    for (let i = 0; i < 30000 && t.status !== "COMPLETED"; i++) eng.step();
+    expect(t.status).toBe("COMPLETED");
+  }, 120000);
   it("only one robot occupies a lift; boarding order is FIFO", () => {
     const eng = new SimEngine(layout, { seed: 11 });
     for (const dst of ["PACK-01", "SORT-01", "PACK-02"]) eng.createTask({ type: "PICK", priority: "CRITICAL", source: dst === "PACK-01" ? "SHELF-M01" : dst === "SORT-01" ? "SHELF-M10" : "SHELF-M20", destination: dst });

@@ -172,13 +172,18 @@ class EventType(str, Enum):
     CAMERA_STATUS_CHANGED = "CAMERA_STATUS_CHANGED"
     SENSOR_STATUS_CHANGED = "SENSOR_STATUS_CHANGED"
     # Lift（規格書 §19）
+    LIFT_REQUESTED = "LIFT_REQUESTED"
     LIFT_RESERVED = "LIFT_RESERVED"
     LIFT_QUEUE_ENTERED = "LIFT_QUEUE_ENTERED"
     LIFT_ARRIVED = "LIFT_ARRIVED"
+    LIFT_LEVELING = "LIFT_LEVELING"
     LIFT_GATE_OPENED = "LIFT_GATE_OPENED"
+    ROBOT_BOARDING_STARTED = "ROBOT_BOARDING_STARTED"
     ROBOT_BOARDED = "ROBOT_BOARDED"
     LIFT_DEPARTED = "LIFT_DEPARTED"
+    ROBOT_ALIGHTING_STARTED = "ROBOT_ALIGHTING_STARTED"
     ROBOT_EXITED = "ROBOT_EXITED"
+    LIFT_COOLDOWN_STARTED = "LIFT_COOLDOWN_STARTED"
     LIFT_FAULT = "LIFT_FAULT"
     LIFT_RESERVATION_RELEASED = "LIFT_RESERVATION_RELEASED"
     AI_DECISION = "AI_DECISION"
@@ -342,6 +347,7 @@ class LiftState(_Base):
     queue: dict[str, list[RobotId]] = Field(default_factory=lambda: {"1": [], "2": []})
     until_tick: int = 0
     fault: bool = False
+    fault_remaining: int = 0             # 故障當下凍結的剩餘動作 ticks；解除時從這裡續跑（平台不瞬移）
     trips: int = 0
     busy_ticks: int = 0
     wait_total_ticks: int = 0
@@ -472,6 +478,7 @@ class KpiSnapshot(_Base):
 
 class HeatmapLayer(_Base):
     kind: Literal["TRAFFIC", "WAIT", "CONGESTION"]
+    floor: int = 1                # 所屬樓層（round-5 修正：每樓一份，前端以 kind:floor 為 key）
     cols: int
     rows: int
     values: list[float]

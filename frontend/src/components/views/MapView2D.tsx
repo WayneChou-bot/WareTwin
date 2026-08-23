@@ -37,14 +37,14 @@ export function MapView2D({ mode }: { mode: "MAP" | "TRAFFIC" | "HEATMAP" }) {
   const heat = useMemo(() => {
     if (mode === "MAP") return null;
     const cs = 2, cols = Math.ceil(W / cs), rows = Math.ceil(D / cs), v = new Float32Array(cols * rows);
-    const layer = source === "online" ? (mode === "HEATMAP" ? remoteHeat?.congestion : remoteHeat?.traffic) : undefined;
+    const layer = source === "online" ? remoteHeat?.[`${mode === "HEATMAP" ? "CONGESTION" : "TRAFFIC"}:${mapFloor}`] : undefined;
     if (layer) {
       // 後端已降採樣到 2 m 格並正規化
       for (let i = 0; i < Math.min(v.length, layer.values.length); i++) v[i] = layer.values[i] * 100;
     } else if (source !== "online") {
       const eng = getEngine(); const g = eng.grid;
-      const src = mode === "HEATMAP" ? eng.traffic : eng.trafficShort;
-      for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) { const t = src[r * g.cols + c]; if (t > 0) v[Math.floor(r / cs) * cols + Math.floor(c / cs)] += t; }
+      const src = (mode === "HEATMAP" ? eng.traffic : eng.trafficShort)[mapFloor];
+      if (src) for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) { const t = src[r * g.cols + c]; if (t > 0) v[Math.floor(r / cs) * cols + Math.floor(c / cs)] += t; }
     }
     if (mode === "TRAFFIC") {
       // 即時密度核心：半徑 ~5 m；停著不動且非閒置/充電的機器人權重加倍（瓶頸）

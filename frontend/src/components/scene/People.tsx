@@ -5,15 +5,19 @@ import { FLOOR_ELEV } from "./Mezzanine";
 /** 人員 / 堆高機 NPC；Phase 1 為靜態裝飾，Phase 4 由故障注入驅動 */
 export function People({ lite = false }: { lite?: boolean }) {
   const people = useStore((s) => s.twin.people);
-  // Phase 1：固定幾個穿螢光背心的工作人員與一台堆高機，讓畫面有生氣
+  const af = useStore((s) => s.activeFloor);
+  const activeFloor = lite || af === "exploded" ? "all" : af;
+  const explodeY = (floor: number) => (af === "exploded" && floor === 2 ? 5 : 0);
+  const show = (floor: number) => activeFloor === "all" || floor === activeFloor;
+  // Phase 1：固定幾個穿螢光背心的工作人員與一台堆高機（一樓裝飾），讓畫面有生氣
   const staticWorkers: Array<[number, number, number]> = [[33, 0, 9], [66, 0, 9], [12, 0, 66], [89, 0, 60]];
   const forklift: [number, number, number] = [8, 0, 4];
   return (
     <group>
-      {staticWorkers.map((p, i) => <Worker key={i} position={p} heading={i * 1.1} />)}
-      <Forklift position={forklift} />
-      {Object.values(people).map((p) => {
-        const ey = FLOOR_ELEV[p.floor ?? 1] ?? 0;
+      {show(1) && staticWorkers.map((p, i) => <Worker key={i} position={p} heading={i * 1.1} />)}
+      {show(1) && <Forklift position={forklift} />}
+      {Object.values(people).filter((p) => show(p.floor ?? 1)).map((p) => {
+        const ey = (FLOOR_ELEV[p.floor ?? 1] ?? 0) + explodeY(p.floor ?? 1);
         return (
           <group key={p.id} position-y={ey}>
             {p.kind === "WORKER" ? <Worker position={p.position} heading={p.heading} alert /> : <Forklift position={p.position} heading={p.heading} />}

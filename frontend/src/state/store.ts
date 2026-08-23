@@ -41,7 +41,8 @@ interface Store {
   source: "connecting" | "online" | "local";
   setSource: (s: "connecting" | "online" | "local") => void;
   /** 後端送來的熱圖層（online 時）；local 時從本地引擎讀 */
-  heat: { traffic?: HeatmapLayer; congestion?: HeatmapLayer } | null;
+  /** 遠端熱圖層，key = `${kind}:${floor}`（每樓獨立） */
+  heat: Record<string, HeatmapLayer> | null;
   setHeat: (l: HeatmapLayer | null) => void;
   /** Phase 4 UI：Modal / 抽屜 */
   modal: null | "audit" | "tasks" | "robot" | "fleet";
@@ -90,7 +91,7 @@ export const useStore = create<Store>((set) => ({
   drawer: null,
   setDrawer: (drawer) => set((st) => ({ drawer: st.drawer === drawer ? null : drawer })),
   heat: null,
-  setHeat: (l) => set((st) => (l === null ? { heat: null } : { heat: { ...(st.heat ?? {}), [l.kind === "TRAFFIC" ? "traffic" : "congestion"]: l } })),
+  setHeat: (l) => set((st) => (l === null ? { heat: null } : { heat: { ...(st.heat ?? {}), [`${l.kind}:${l.floor ?? 1}`]: l } })),
   setSpeed: (speed) => set({ speed, paused: speed === 0 }),
   setPaused: (paused) => set({ paused }),
   locations: Object.fromEntries(layout.locations.map((l) => [l.id, l])),

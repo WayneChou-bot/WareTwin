@@ -126,8 +126,9 @@ class TwinServer:
         self.last_sent_tick = tick
         await self.broadcast(msg)
         if tick % HEATMAP_EVERY == 0:
-            await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("CONGESTION", eng.traffic)})
-            await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("TRAFFIC", eng.traffic_short)})
+            for fl in eng.traffic:   # 每樓一份（round-5 修正）
+                await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("CONGESTION", eng.traffic[fl], fl)})
+                await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("TRAFFIC", eng.traffic_short[fl], fl)})
 
     # ── diff ────────────────────────────────────────────────
     SECTIONS = ("tasks", "lifts", "zones", "conveyors", "cameras", "sensors", "people", "alerts")
@@ -180,7 +181,7 @@ class TwinServer:
             patch["recent_decisions"] = S["recent_decisions"][:20]
         return patch
 
-    def heatmap_layer(self, kind: str, src: list[float]) -> dict[str, Any]:
+    def heatmap_layer(self, kind: str, src: list[float], floor: int = 1) -> dict[str, Any]:
         g = self.engine.grid; cs = 2
         cols = (g.cols + cs - 1) // cs; rows = (g.rows + cs - 1) // cs
         v = [0.0] * (cols * rows)
@@ -191,7 +192,7 @@ class TwinServer:
                 if t > 0:
                     v[rr + c // cs] += t
         mx = max(v) or 1.0
-        return {"kind": kind, "cols": cols, "rows": rows, "values": [round(x / mx, 2) for x in v], "window_ticks": 200 if kind == "TRAFFIC" else 6000}
+        return {"kind": kind, "floor": floor, "cols": cols, "rows": rows, "values": [round(x / mx, 2) for x in v], "window_ticks": 200 if kind == "TRAFFIC" else 6000}
 
     # ── 連線 ────────────────────────────────────────────────
     async def broadcast(self, msg: dict[str, Any]) -> None:
@@ -396,7 +397,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
     server.clients.add(ws)
     try:
         await ws.send_text(json.dumps(server.full_message(), separators=(",", ":")))
-        await ws.send_text(json.dumps({"type": "HEATMAP", "layer": server.heatmap_layer("CONGESTION", server.engine.traffic)}))
+        for fl in server.engine.traffic:   # 每樓一份（round-5 修正）
+            await ws.send_text(json.dumps({"type": "HEATMAP", "layer": server.heatmap_layer("CONGESTION", server.engine.traffic[fl], fl)}))
         while True:
             raw = await ws.receive_text()
             await server.handle(ws, raw)

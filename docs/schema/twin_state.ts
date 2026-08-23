@@ -110,7 +110,12 @@ export type EventType =
   | "ZONE_CONGESTION_HIGH"
   | "HUMAN_DETECTED"
   | "HUMAN_CLEARED"
-  // Lift（規格書 §19）
+  // Lift（規格書 §19，完整事件鏈）
+  | "LIFT_REQUESTED"
+  | "ROBOT_BOARDING_STARTED"
+  | "LIFT_LEVELING"
+  | "ROBOT_ALIGHTING_STARTED"
+  | "LIFT_COOLDOWN_STARTED"
   | "LIFT_RESERVED"
   | "LIFT_QUEUE_ENTERED"
   | "LIFT_ARRIVED"
@@ -280,6 +285,8 @@ export interface LiftState {
   queue: Record<string, RobotId[]>;
   until_tick: number;
   fault: boolean;
+  /** FAULT 當下凍結的剩餘計時 ticks；解除時 until_tick = now + fault_remaining，平台從凍結位置續跑（不瞬移） */
+  fault_remaining: number;
   trips: number;
   busy_ticks: number;
   wait_total_ticks: number;
@@ -417,6 +424,8 @@ export interface KpiSnapshot {
 
 export interface HeatmapLayer {
   kind: "TRAFFIC" | "WAIT" | "CONGESTION";
+  /** 資料所屬樓層（每樓獨立統計） */
+  floor: number;
   cols: number;
   rows: number;
   /** row-major，長度 = cols*rows，0..1 已正規化 */
