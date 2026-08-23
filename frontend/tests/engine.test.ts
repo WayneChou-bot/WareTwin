@@ -289,3 +289,74 @@ describe("dispatch audit ↔ actual lift (round-6 P2)", () => {
     expect(actual).toBe(audited);
   }, 120000);
 });
+
+describe("rehydration edge cases（round-7）", () => {
+  const snapshotOf = (e: SimEngine) => JSON.parse(JSON.stringify(e.state));
+
+  it("載貨避障中被接手：回到 TRANSPORTING，不會重跑取貨、不重複 TASK_STARTED", () => {
+    const a = new SimEngine(layout, { seed: 31 });
+    let rid: string | null = null;
+    for (let i = 0; i < 30000 && !rid; i++) {
+      a.step();
+      for (const r of Object.values(a.state.robots)) if (r.fsm === "TRANSPORTING" && r.load.current > 0 && !r.lift_stage && r.path.length - r.path_index > 5) { rid = r.id; break; }
+    }
+    expect(rid).toBeTruthy();
+    // 交通擁塞注入會把所有行進中的機器人打成 OBSTACLE_DETECTED（與正式路徑相同）
+    a.inject({ kind: "TRAFFIC_CONGESTION", zone_id: "A", level: 0.8, duration_ticks: 300 } as never);
+    a.step();
+    const snapFsm = a.state.robots[rid!].fsm;
+    expect(["OBSTACLE_DETECTED", "REPLANNING"]).toContain(snapFsm);
+    const snap = snapshotOf(a);
+    const tid = snap.robots[rid!].current_task_id as string;
+    const maxE = Math.max(...(snap.recent_events as Array<{ id: string }>).map((e) => parseInt(e.id.slice(1), 10)));
+    const b = new SimEngine(layout, { seed: 31, initialState: snap });
+    b.step();
+    // 舊 bug：phase 反推不到 → REPLANNING 落回 NAVIGATING → 抵達後再 PICKING 一次
+    expect(["TRANSPORTING", "REPLANNING"]).toContain(b.state.robots[rid!].fsm);
+    for (let i = 0; i < 60000 && b.state.tasks[tid] && !["COMPLETED", "TRANSFERRED", "FAILED"].includes(b.state.tasks[tid].status); i++) b.step();
+    // 接手之後（事件序號 > maxE）不得再出現這個任務的 TASK_STARTED（= 第二次 picked item）
+    const dup = b.state.recent_events.filter((e) => parseInt(e.id.slice(1), 10) > maxE && e.type === "TASK_STARTED" && e.task_id === tid);
+    expect(dup).toHaveLength(0);
+  }, 120000);
+
+  it("輸送帶故障中交付被接手：剩餘時間含 stationSlowdown，不會提早完成", () => {
+    const a = new SimEngine(layout, { seed: 32 });
+    const cv = layout.conveyors.find((c) => (c as { feeds?: string }).feeds)! as { id: string; feeds: string };
+    a.inject({ kind: "CONVEYOR_FAILURE", conveyor_id: cv.id } as never);
+    a.step();
+    expect(a.state.conveyors[cv.id].status).toBe("ERROR");
+    let rid: string | null = null;
+    const prevFsm: Record<string, string> = {};
+    for (let i = 0; i < 90000 && !rid; i++) {
+      a.step();
+      for (const r of Object.values(a.state.robots)) {
+        const t = r.current_task_id ? a.state.tasks[r.current_task_id] : undefined;
+        if (r.fsm === "DELIVERING" && prevFsm[r.id] !== "DELIVERING" && t && t.destination === cv.feeds) { rid = r.id; break; }
+        prevFsm[r.id] = r.fsm;
+      }
+    }
+    expect(rid).toBeTruthy();   // 剛進 DELIVERING（elapsed ≤ 1），真實剩餘 ≈ DROP_TICKS × 4 = 120
+    const b = new SimEngine(layout, { seed: 32, initialState: snapshotOf(a) });
+    let n = 0;
+    while (b.state.robots[rid!].fsm === "DELIVERING" && n < 300) { b.step(); n++; }
+    expect(n).toBeGreaterThan(30);      // 舊 bug：沒乘 stationSlowdown → ≤ 30 tick 就交付完
+    expect(n).toBeLessThanOrEqual(121);
+  }, 120000);
+
+  it("接手後 avg_task_time_s 維持快照值，不歸零", () => {
+    const a = new SimEngine(layout, { seed: 33 });
+    for (let i = 0; i < 60000 && a.state.kpi.operation.completed_today < 5; i++) a.step();
+    while (a.state.sim.tick % 10 !== 0) a.step();   // 對齊 KPI 更新
+    const snap = snapshotOf(a);
+    const avg0 = snap.kpi.operation.avg_task_time_s as number;
+    expect(avg0).toBeGreaterThan(0);
+    const b = new SimEngine(layout, { seed: 33, initialState: snap });
+    const done0 = b.state.kpi.operation.completed_today;
+    for (let i = 0; i < 10; i++) b.step();          // 跨過至少一次 KPI 更新
+    if (b.state.kpi.operation.completed_today === done0) {
+      expect(b.state.kpi.operation.avg_task_time_s).toBe(avg0);   // 舊 bug：taskTimes 空 → 0
+    } else {
+      expect(b.state.kpi.operation.avg_task_time_s).toBeGreaterThan(0);   // 剛好有新完成：至少不得歸零
+    }
+  }, 120000);
+});

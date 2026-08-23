@@ -157,6 +157,10 @@ export class SimEngine {
     for (const d of S.recent_decisions) this.decisionSeq = Math.max(this.decisionSeq, num(d.id));
     this.completedCount = S.kpi.operation.completed_today;
     this.onTime = Math.round(S.kpi.operation.on_time_rate * this.completedCount);
+    // 平均任務時間：逐筆歷史不在 TwinState 裡，用快照 KPI 的平均值填等量合成紀錄（round-7 P2-3）
+    // → 接手後平均值不變，之後新完成的任務以正確權重滑入（同均值、同權重的統計等價還原）
+    const avgTicks = Math.round(S.kpi.operation.avg_task_time_s / SIM.TICK_S);
+    if (avgTicks > 0 && this.completedCount > 0) this.taskTimes = new Array(Math.min(this.completedCount, 200)).fill(avgTicks);
     const series = S.kpi.throughput_series;
     this.lastSeriesTick = series.length ? series[series.length - 1].tick : S.sim.tick;
     for (const zid in S.zones) if (S.zones[zid].blocked_reason) this.blockedZones.add(zid);
@@ -167,12 +171,17 @@ export class SimEngine {
       rt.phase = r.fsm === "NAVIGATING" || r.fsm === "TASK_ASSIGNED" ? "TO_SOURCE"
         : r.fsm === "TRANSPORTING" ? "TO_DEST"
         : r.fsm === "GOING_TO_CHARGE" || r.fsm === "CHARGING" ? "TO_CHARGER"
+        // 避障中被接手（round-7 P2-1）：REPLANNING 靠 phase 決定回哪個狀態，必須從公開狀態反推 ——
+        // destination 是充電樁 → TO_CHARGER；貨已在車上 → 絕不可能還在取貨路上 → TO_DEST；有任務 → TO_SOURCE；否則 TO_PARK（→ IDLE）
+        : r.fsm === "OBSTACLE_DETECTED" || r.fsm === "REPLANNING"
+          ? (r.destination && r.destination in this.chargerBusy ? "TO_CHARGER" : r.load.current > 0 ? "TO_DEST" : task ? "TO_SOURCE" : "TO_PARK")
         : null;
       rt.goalLoc = r.destination;
       if (r.path.length && r.path_index < r.path.length) { const last = r.path[r.path.length - 1]; rt.target = [last[0], last[1]]; }
       if (r.fsm === "PICKING") rt.dwell = Math.max(1, SIM.PICK_TICKS - (S.sim.tick - r.fsm_since_tick));
-      if (r.fsm === "DELIVERING") rt.dwell = Math.max(1, SIM.DROP_TICKS - (S.sim.tick - r.fsm_since_tick));
-      if ((r.fsm === "GOING_TO_CHARGE" || r.fsm === "CHARGING") && r.destination && r.destination in this.chargerBusy) { rt.chargerId = r.destination; this.chargerBusy[r.destination] = rid; }
+      // 交付剩餘時間要含 stationSlowdown（輸送帶故障 ×4／維護 ×2），否則故障中的交付會提早完成（round-7 P2-2）
+      if (r.fsm === "DELIVERING") rt.dwell = Math.max(1, SIM.DROP_TICKS * (task ? this.stationSlowdown(task.destination) : 1) - (S.sim.tick - r.fsm_since_tick));
+      if (rt.phase === "TO_CHARGER" && r.destination && r.destination in this.chargerBusy) { rt.chargerId = r.destination; this.chargerBusy[r.destination] = rid; }
       rt.lastBatteryAlert = r.battery < THRESHOLDS.BATTERY_CRITICAL ? "CRIT" : r.battery < THRESHOLDS.BATTERY_WARNING ? "WARN" : "NONE";
       if (r.lift_stage) {
         // 電梯行程：queue / occupant / reserved_by 本來就在 state.lifts 裡，這裡補回 pending 與子狀態
