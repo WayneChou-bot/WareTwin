@@ -5,24 +5,29 @@ import { getEngine } from "../../simulation/runner";
 
 /** 俯視 2D 地圖：導航網格障礙、Zone、輸送帶、機器人。TRAFFIC / HEATMAP 模式疊上熱區。 */
 export function MapView2D({ mode }: { mode: "MAP" | "TRAFFIC" | "HEATMAP" }) {
-  const robots = useStore((s) => s.twin.robots);
+  const allRobots = useStore((s) => s.twin.robots);
+  const activeFloorSel = useStore((s) => s.activeFloor);
+  const mapFloor = activeFloorSel === "all" ? 1 : activeFloorSel;   // 2D 圖一次畫一層；All 時畫一樓
+  const robots = Object.fromEntries(Object.entries(allRobots).filter(([, r]) => r.floor === mapFloor));
   const zones = useStore((s) => s.twin.zones);
   const selected = useStore((s) => s.selectedRobot);
   const select = useStore((s) => s.select);
   const { width: W, depth: D } = layout.size;
-  const grid = useMemo(() => buildNavGrid(layout), []);
+  const grid = useMemo(() => buildNavGrid(layout, mapFloor), [mapFloor]);
 
   // 障礙格合併成矩形 (逐列 run-length) 以減少 SVG 元素
   const blocks = useMemo(() => {
+    const fp = mapFloor === 1 ? null : layout.floors.find((f) => f.id === mapFloor)?.footprint;
+    const inFp = (c: number, r: number) => !fp || (c >= Math.min(...fp.map((p) => p[0])) && c < Math.max(...fp.map((p) => p[0])) && r >= Math.min(...fp.map((p) => p[1])) && r < Math.max(...fp.map((p) => p[1])));
     const out: Array<[number, number, number]> = [];
     for (let r = 0; r < grid.rows; r++) {
       let c = 0;
       while (c < grid.cols) {
-        if (grid.cells[r * grid.cols + c] === 1) { let e = c; while (e < grid.cols && grid.cells[r * grid.cols + e] === 1) e++; out.push([c, r, e - c]); c = e; } else c++;
+        if (grid.cells[r * grid.cols + c] === 1 && inFp(c, r)) { let e = c; while (e < grid.cols && grid.cells[r * grid.cols + e] === 1 && inFp(e, r)) e++; out.push([c, r, e - c]); c = e; } else c++;
       }
     }
     return out;
-  }, [grid]);
+  }, [grid, mapFloor]);
 
   // TRAFFIC：即時密度 — 每台機器人以高斯核心擴散，速度越慢（塞住）越熱，加上最近 ~20 s 的短期軌跡
   // HEATMAP：長期累積 — 引擎的 traffic 陣列（幾乎不衰減），看的是「哪些走道一直在被使用」
@@ -75,15 +80,22 @@ export function MapView2D({ mode }: { mode: "MAP" | "TRAFFIC" | "HEATMAP" }) {
           {Array.from(heat.v).map((s, i) => { const t = s / heat.max; if (t < 0.08) return null; return <rect key={i} x={(i % heat.cols) * heat.cs} y={Math.floor(i / heat.cols) * heat.cs} width={heat.cs} height={heat.cs} fill={heatColor(t)} opacity={Math.min(0.85, t + 0.15)} />; })}
         </g>
       )}
-      {layout.zones.map((z) => {
+      {mapFloor !== 1 && <text x={1.5} y={-3.5} fill="#14b8a6" fontSize="2.6" fontWeight="700">FLOOR {mapFloor} · MEZZANINE</text>}
+      {layout.zones.filter((z) => (z.floor ?? 1) === mapFloor).map((z) => {
         const st = zones[z.id]?.status; const col = st === "BLOCKED" ? "#ef4444" : st === "CONGESTED" ? "#f97316" : z.color;
         return <g key={z.id}><polygon points={z.polygon.map((p) => p.join(",")).join(" ")} fill={col} fillOpacity="0.05" stroke={col} strokeWidth="0.35" /><text x={z.polygon[0][0] + 1} y={z.polygon[0][1] - 1} fill={col} fontSize="2.6" fontWeight="700">{z.name.toUpperCase()}</text></g>;
       })}
+      {mapFloor !== 1 && layout.floors.filter((f) => f.id === mapFloor && f.footprint).map((f) => (
+        <polygon key={f.id} points={f.footprint!.map((p) => p.join(",")).join(" ")} fill="#14b8a6" fillOpacity="0.03" stroke="#14b8a6" strokeWidth="0.3" strokeDasharray="1.5 0.8" />
+      ))}
+      {layout.lifts.map((l) => (
+        <g key={l.id}><rect x={l.cell[0] - 0.7} y={l.cell[1] - 0.7} width="2.4" height="2.4" fill="none" stroke="#a78bfa" strokeWidth="0.35" /><text x={l.cell[0] + 2} y={l.cell[1] + 0.6} fill="#a78bfa" fontSize="1.8">{l.id}</text></g>
+      ))}
       {blocks.map(([c, r, len], i) => <rect key={i} x={c * grid.cols / grid.cols} y={r} width={len} height="1" fill="#334155" />)}
-      {layout.conveyors.map((c) => <polyline key={c.id} points={c.path.map((p) => p.join(",")).join(" ")} fill="none" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.9" />)}
-      {layout.docks.map((d) => <rect key={d.id} x={d.rect[0]} y={d.rect[1]} width={d.rect[2] - d.rect[0]} height={d.rect[3] - d.rect[1]} fill="none" stroke={d.kind === "INBOUND" ? "#22c55e" : "#22d3ee"} strokeWidth="0.3" strokeDasharray="1 0.6" />)}
-      {layout.charging_stations.map((c) => <circle key={c.id} cx={c.position[0]} cy={c.position[2]} r="0.6" fill="#3b82f6" />)}
-      {layout.cameras.map((c) => <rect key={c.id} x={c.position[0] - 0.5} y={c.position[2] - 0.5} width="1" height="1" fill="#facc15" />)}
+      {mapFloor === 1 && layout.conveyors.map((c) => <polyline key={c.id} points={c.path.map((p) => p.join(",")).join(" ")} fill="none" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.9" />)}
+      {mapFloor === 1 && layout.docks.map((d) => <rect key={d.id} x={d.rect[0]} y={d.rect[1]} width={d.rect[2] - d.rect[0]} height={d.rect[3] - d.rect[1]} fill="none" stroke={d.kind === "INBOUND" ? "#22c55e" : "#22d3ee"} strokeWidth="0.3" strokeDasharray="1 0.6" />)}
+      {mapFloor === 1 && layout.charging_stations.map((c) => <circle key={c.id} cx={c.position[0]} cy={c.position[2]} r="0.6" fill="#3b82f6" />)}
+      {layout.cameras.filter((c) => (c.floor ?? 1) === mapFloor).map((c) => <rect key={c.id} x={c.position[0] - 0.5} y={c.position[2] - 0.5} width="1" height="1" fill="#facc15" />)}
       {Object.values(robots).map((r) => r.path.length > r.path_index && (
         <polyline key={"p" + r.id} points={[[r.position[0], r.position[2]], ...r.path.slice(r.path_index).map((c) => [c[0] + 0.5, c[1] + 0.5])].map((p) => p.join(",")).join(" ")} fill="none" stroke={r.id === selected ? "#fff" : "#22d3ee"} strokeWidth={r.id === selected ? 0.5 : 0.25} strokeOpacity={r.id === selected ? 1 : 0.5} strokeDasharray="1 0.6" />
       ))}

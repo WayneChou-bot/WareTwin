@@ -219,7 +219,13 @@ class TwinServer:
             await ws.send_text(json.dumps({"type": "ERROR", "code": "TOO_LARGE", "message": f"message exceeds {MAX_WS_MESSAGE_BYTES // 1024} KB"})); return
         ok, wait = limiter.check("ws", key)
         if not ok:
-            await ws.send_text(json.dumps({"type": "ERROR", "code": "RATE_LIMITED", "message": f"too many messages — retry in {wait:.0f} s"})); return
+            # 訊息還沒 validate，但盡量把 request_id 撈出來帶回去，讓前端能把錯誤關聯到等待中的 Copilot / What-if
+            rid = None
+            try:
+                rid = (json.loads(raw) or {}).get("request_id")
+            except Exception:
+                pass
+            await ws.send_text(json.dumps({"type": "ERROR", "code": "RATE_LIMITED", "message": f"too many messages — retry in {wait:.0f} s", "request_id": rid if isinstance(rid, str) else None})); return
         try:
             msg = client_adapter.validate_json(raw)
         except ValidationError as e:

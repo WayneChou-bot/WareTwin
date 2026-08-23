@@ -73,3 +73,10 @@
 範例刻意模仿預期完成介面圖的佈局：碼頭在上、Zone A/B 在上半、Zone C/D 在下半、輸送帶橫貫中央並在右側（Conveyor #03）轉向 Packing，充電站在左下、停車區在正下方。Conveyor #03 被放在 Zone D 的末端通往 PACK-01，這樣 Demo 04「Conveyor #03 停止」會真的造成 Packing 端的瓶頸，而不是只是換個顏色。
 
 如果要改尺寸或密度，直接改 `gen_layout.py` 頂部的參數（`W, D`、每 Zone 排數 `n_rows`、每排 bay 數）重新產生即可。
+
+
+## floors / lifts（Phase 8）
+
+- `floors`: `[{id, name, elevation, footprint?}]` — 樓層清單；`elevation` 為樓板頂面高度 (m)，`footprint` 是二樓以上樓板的多邊形（之外視為不存在的樓板 = 障礙）。
+- `lifts`: `[{id, cell:[c,r], floors:[…], ride_ticks}]` — 貨梯；`cell` 在所有它連接的樓層都必須可走。一次載一台機器人，`ride_ticks` 為搭乘時間。
+- `racks` / `locations` / `zones` / `cameras` / `spawn.robots` 皆可帶 `floor`（預設 1）。每個樓層有獨立導航網格（見 navgrid 的 floor 參數）。

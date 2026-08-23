@@ -64,7 +64,7 @@ export function WhatIfDrawer() {
     <aside className="drawer wide" role="dialog" aria-label="What-if Simulation" ref={trap} tabIndex={-1}>
       <header className="drawer-h"><span>What-if Simulation</span><button className="icon-btn" aria-label="Close" onClick={() => setDrawer(null)}>✕</button></header>
       <div className="drawer-b">
-        <p className="hint">Two clones of the current twin state: Baseline runs as-is, Scenario runs with the injected failures. Same random seed, so the difference comes only from the failures. LIVE is never touched.</p>
+        <p className="hint">Two clones of the current twin state: Baseline runs as-is, Scenario runs with the injected failures. Same random seed, so the difference comes only from the failures. LIVE operational state is never changed (only an audit event records that the analysis ran).</p>
         <h4 className="drawer-sub" style={{ marginTop: 0 }}>Scenario</h4>
         <div className="wi-list">
           {PRESETS.map((p) => (

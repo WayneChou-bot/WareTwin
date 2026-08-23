@@ -37,6 +37,7 @@ WareTwin 是一個 100 × 70 m 倉庫的即時 **3D 數位分身**：20 台自�
 | ⚡ **情境注入** | 機器人故障、低電量、輸送帶停機、人員闖入（封鎖 Zone + 改道）、交通擁塞、攝影機離線、需求爆量——一鍵注入、皆可解除。 |
 | 🔮 **What-if 模擬** | 複製當下的 Twin、注入、跑 1–10 分鐘，以同一個亂數種子的 Baseline 比較 12 項指標。LIVE 完全不受影響。 |
 | 💬 **AI 營運 Copilot** | 問「Why is throughput dropping?」——答案來自即時狀態並引用可點擊的機器人／任務／事件。LLM 可選（見 [AI 模式](#-ai-模式)）。 |
+| 🏢 **多樓層與貨梯** | 二樓夾層有自己的貨架、Zone、攝影機與導航網格。機器人搭兩座貨梯跨樓層——跨樓任務會先規劃到電梯、排隊、搭乘（3D 有升降動畫）、抵達後重新規劃；Fleet Manager 對跨樓指派加距離懲罰，同樓層機器人優先。 |
 | 📡 **機上感知** | 每台 AMR 配備虛擬 270°／4 m LiDAR：看得到其他機器人與人員（貨架會遮擋視線），主動減速與保持車距，不再只靠格子預約；回報 `CLEAR / SLOWING / STOPPED` 與所見障礙，3D 畫面以感測扇形呈現。 |
 | 👁️ **VLM 感知** | 把虛擬 CCTV 畫面送給視覺模型 → `{event, severity, bbox, confidence}` 疊在畫面上。 |
 | 🔌 **即時同步** | FastAPI + WebSocket：一次 `FULL`，之後每 tick `PATCH` 差異（約 12 KB/s）。後端連不上時瀏覽器自動切換到內建的 TypeScript 引擎繼續運作。 |
@@ -97,8 +98,8 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 33 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
-cd frontend && npm test                 # 10 個：TypeScript 引擎的相同契約
+cd backend && python -m pytest -q      # 39 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、複合故障不死鎖、WS/REST、AI、What-if
+cd frontend && npm test                 # 12 個：TypeScript 引擎的相同契約
 ```
 
 ## ☁️ 部署
@@ -121,8 +122,8 @@ cd frontend && npm test                 # 10 個：TypeScript 引擎的相同契
 
 ## 🗺 Roadmap
 
-- [x] Phase 1 3D 基礎 · [x] Phase 2 機器人模擬 · [x] Phase 3 後端 + WebSocket · [x] Phase 4 營運 · [x] Phase 5 AI · [x] Phase 6 What-if · [x] Phase 7 機上感知與局部避障
-- [ ] Phase 8 機器人擴充：把 ROS 2／Webots 的機器人位姿餵進 `SimEngine.step()`，Twin State 契約與 UI 不變
+- [x] Phase 1 3D 基礎 · [x] Phase 2 機器人模擬 · [x] Phase 3 後端 + WebSocket · [x] Phase 4 營運 · [x] Phase 5 AI · [x] Phase 6 What-if · [x] Phase 7 機上感知 · [x] Phase 8 多樓層 + 貨梯、輸送帶動畫
+- [ ] Phase 9 機器人擴充：把 ROS 2／Webots 的機器人位姿餵進 `SimEngine.step()`，Twin State 契約與 UI 不變
 - [ ] 多機協同規劃（CBS／時間窗預約）取代目前的讓路／退避死鎖解除
 - [ ] PostgreSQL + Redis 支援多實例部署
 

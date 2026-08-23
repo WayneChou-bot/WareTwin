@@ -5,16 +5,49 @@ import * as THREE from "three";
 import { layout, useStore } from "../../state/store";
 import type { LayoutConveyor } from "../../layout/types";
 
-/** 輸送帶：沿 path 擠出，RUNNING 時滾輪貼圖捲動，ERROR 紅色閃爍 */
+/** 輸送帶：沿 path 擠出，RUNNING 時包裹沿帶面移動（速度 = 模擬的 speed_mps × 播放倍速），ERROR 紅色閃爍、包裹停住 */
 function Conveyor({ c }: { c: LayoutConveyor }) {
   const status = useStore((s) => s.twin.conveyors[c.id]?.status ?? "RUNNING");
+  const beltSpeed = useStore((s) => s.twin.conveyors[c.id]?.speed_mps ?? c.speed_mps);
   const matRef = useRef<THREE.MeshStandardMaterial>(null!);
-  const segs = [] as JSX.Element[];
+  const parcelsRef = useRef<THREE.Group>(null!);
+
+  // 折線參數化：總長與各段起點，讓包裹能沿整條 path 移動（含轉角）
+  const segsGeo: Array<{ ax: number; az: number; ang: number; len: number; start: number }> = [];
+  let total = 0;
   for (let i = 0; i < c.path.length - 1; i++) {
     const [ax, az] = c.path[i], [bx, bz] = c.path[i + 1];
-    const len = Math.hypot(bx - ax, bz - az), ang = Math.atan2(bz - az, bx - ax);
+    const len = Math.hypot(bx - ax, bz - az);
+    segsGeo.push({ ax, az, ang: Math.atan2(bz - az, bx - ax), len, start: total });
+    total += len;
+  }
+  const pointAt = (d: number): [number, number, number] => {
+    d = ((d % total) + total) % total;
+    const seg = segsGeo.find((g) => d >= g.start && d <= g.start + g.len) ?? segsGeo[segsGeo.length - 1];
+    const t = d - seg.start;
+    return [seg.ax + Math.cos(seg.ang) * t, 1.15, seg.az + Math.sin(seg.ang) * t];
+  };
+  const N_PARCELS = Math.max(2, Math.floor(total / 5));
+  const offsets = useRef<number[]>(Array.from({ length: N_PARCELS }, (_, k) => (k * total) / N_PARCELS));
+
+  useFrame(({ clock }, dt) => {
+    if (status === "ERROR" && matRef.current) matRef.current.emissiveIntensity = 0.4 + Math.sin(clock.elapsedTime * 6) * 0.35;
+    const st = useStore.getState();
+    const v = status === "RUNNING" && !st.paused ? beltSpeed * st.speed : 0;
+    const g = parcelsRef.current; if (!g) return;
+    for (let k = 0; k < g.children.length; k++) {
+      if (v > 0) offsets.current[k] = (offsets.current[k] + v * dt) % total;
+      const [x, y, z] = pointAt(offsets.current[k]);
+      g.children[k].position.set(x, y, z);
+    }
+  });
+
+  const segs = [] as JSX.Element[];
+  for (let i = 0; i < segsGeo.length; i++) {
+    const gseg = segsGeo[i]; const len = gseg.len;
+    const [ax, az] = c.path[i], [bx, bz] = c.path[i + 1];
     segs.push(
-      <group key={i} position={[(ax + bx) / 2, 0, (az + bz) / 2]} rotation-y={-ang}>
+      <group key={i} position={[(ax + bx) / 2, 0, (az + bz) / 2]} rotation-y={-gseg.ang}>
         {/* 帶面 */}
         <mesh position={[0, 0.8, 0]} castShadow receiveShadow>
           <boxGeometry args={[len, 0.12, c.width]} />
@@ -34,13 +67,6 @@ function Conveyor({ c }: { c: LayoutConveyor }) {
             <meshStandardMaterial color="#374151" metalness={0.6} roughness={0.5} />
           </mesh>
         ))}
-        {/* 帶上的包裹 */}
-        {status !== "ERROR" && Array.from({ length: Math.floor(len / 5) }, (_, k) => (
-          <mesh key={k} position={[-len / 2 + 2 + k * 5, 1.15, 0]} castShadow>
-            <boxGeometry args={[0.7, 0.5, 0.6]} />
-            <meshStandardMaterial color="#c49a6c" roughness={0.9} />
-          </mesh>
-        ))}
         {/* 狀態燈條 */}
         <mesh position={[0, 0.92, 0]}>
           <boxGeometry args={[len, 0.02, 0.05]} />
@@ -49,10 +75,18 @@ function Conveyor({ c }: { c: LayoutConveyor }) {
       </group>,
     );
   }
-  useFrame(({ clock }) => {
-    if (status === "ERROR" && matRef.current) matRef.current.emissiveIntensity = 0.4 + Math.sin(clock.elapsedTime * 6) * 0.35;
-  });
-  return <group>{segs}</group>;
+  // 包裹放在世界座標的群組裡（不隨段旋轉），每 frame 沿折線推進
+  const parcels = (
+    <group ref={parcelsRef}>
+      {Array.from({ length: N_PARCELS }, (_, k) => (
+        <mesh key={k} castShadow>
+          <boxGeometry args={[0.7, 0.5, 0.6]} />
+          <meshStandardMaterial color={k % 3 === 0 ? "#b98a5e" : "#c49a6c"} roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+  return <group>{segs}{parcels}</group>;
 }
 
 /** 工作站、充電樁、停車區、限制區、人行道、感測器 */

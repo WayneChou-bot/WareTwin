@@ -164,3 +164,28 @@ def test_whatif_rate_limit_error_carries_request_id(monkeypatch):
                     assert m["code"] == "RATE_LIMITED" and m["request_id"] == "w-42"; break
             else:
                 raise AssertionError("no ERROR")
+
+
+def test_ws_bucket_rate_limit_carries_request_id(monkeypatch):
+    """連 ws 總量限流（在 validate 之前）也要帶回 request_id，What-if 才不會卡在 Simulating。"""
+    monkeypatch.setenv("TWIN_RATE_LIMIT", "1"); limiter.reset()
+    from app.guard import LIMITS
+    monkeypatch.setitem(LIMITS, "ws", (1, 60.0))
+    with TestClient(app) as c:
+        with c.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "RESYNC"})
+            ws.send_json({"type": "WHATIF_RUN", "request": {"scenario_name": "t", "injections": [], "duration_ticks": 60}, "request_id": "w-9"})
+            for _ in range(200):
+                m = ws.receive_json()
+                if m["type"] == "ERROR" and m["code"] == "RATE_LIMITED":
+                    assert m["request_id"] == "w-9"; break
+            else:
+                raise AssertionError("no RATE_LIMITED")
+
+
+def test_server_message_schema_matches_wire_format():
+    """Python ServerMessage 契約要能 validate 實際送出的 WHATIF_RESULT / ERROR（含 request_id）。"""
+    from app.schema import MsgError
+    MsgError.model_validate({"type": "ERROR", "code": "RATE_LIMITED", "message": "x", "request_id": "w-1"})
+    MsgError.model_validate({"type": "ERROR", "code": "BAD_MESSAGE", "message": "x"})

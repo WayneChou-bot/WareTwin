@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Html, Line } from "@react-three/drei";
 import * as THREE from "three";
 import { STATUS_COLOR, useStore } from "../../state/store";
+import { FLOOR_ELEV } from "./Mezzanine";
 import type { RobotState } from "../../schema/twin_state";
 
 /** 程序化 AMR 模型：底盤、深色頂蓋、四輪、前方藍色燈條、狀態燈；載貨時頂上放箱子 */
@@ -19,6 +20,10 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       const k = smooth ? 1 - Math.pow(0.0005, dt) : 1;
       g.position.x += (r.position[0] - g.position.x) * k;
       g.position.z += (r.position[2] - g.position.z) * k;
+      // 樓層高度：換樓層時用較慢的緩動 → 看得到搭電梯上升/下降
+      const ty = FLOOR_ELEV[r.floor] ?? 0;
+      const ky = smooth ? 1 - Math.pow(0.25, dt) : 1;
+      g.position.y += (ty - g.position.y) * ky;
       let dh = -r.heading - g.rotation.y; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
       g.rotation.y += dh * k;
       if (wheelsRef.current && r.velocity > 0.05) wheelsRef.current.rotation.z -= (r.velocity / 0.12) * dt;
@@ -28,7 +33,7 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
   });
   const loaded = r.load.current > 0;
   return (
-    <group ref={groupRef} position={r.position} rotation-y={-r.heading}>
+    <group ref={groupRef} position={[r.position[0], FLOOR_ELEV[r.floor] ?? 0, r.position[2]]} rotation-y={-r.heading}>
       <group onClick={(e) => { e.stopPropagation(); onSelect(); }} onPointerOver={() => (document.body.style.cursor = "pointer")} onPointerOut={() => (document.body.style.cursor = "")}>
         {/* 底盤 */}
         <mesh position={[0, 0.22, 0]} castShadow>
@@ -138,17 +143,18 @@ function PerceptionGizmo({ r }: { r: RobotState }) {
 function RobotPath({ r, selected }: { r: RobotState; selected: boolean }) {
   const pts = useMemo(() => {
     if (r.path.length === 0 || r.path_index >= r.path.length) return null;
-    const out: [number, number, number][] = [[r.position[0], 0.06, r.position[2]]];
-    for (let i = r.path_index; i < r.path.length; i++) out.push([r.path[i][0] + 0.5, 0.06, r.path[i][1] + 0.5]);
+    const y = (FLOOR_ELEV[r.floor] ?? 0) + 0.06;
+    const out: [number, number, number][] = [[r.position[0], y, r.position[2]]];
+    for (let i = r.path_index; i < r.path.length; i++) out.push([r.path[i][0] + 0.5, y, r.path[i][1] + 0.5]);
     return out;
-  }, [r.path, r.path_index, r.position]);
+  }, [r.path, r.path_index, r.position, r.floor]);
   if (!pts) return null;
   const end = pts[pts.length - 1];
   const col = r.fsm === "GOING_TO_CHARGE" ? "#60a5fa" : r.load.current > 0 ? "#f59e0b" : "#22d3ee";
   return (
     <group>
       <Line points={pts} color={selected ? "#ffffff" : col} lineWidth={selected ? 2.4 : 1.1} dashed dashSize={0.7} gapSize={0.4} transparent opacity={selected ? 1 : 0.5} />
-      <mesh position={[end[0], 0.05, end[2]]} rotation-x={-Math.PI / 2}><ringGeometry args={[0.45, 0.65, 24]} /><meshBasicMaterial color={col} transparent opacity={0.85} /></mesh>
+      <mesh position={[end[0], end[1] - 0.01, end[2]]} rotation-x={-Math.PI / 2}><ringGeometry args={[0.45, 0.65, 24]} /><meshBasicMaterial color={col} transparent opacity={0.85} /></mesh>
     </group>
   );
 }
@@ -159,9 +165,12 @@ export function Robots({ lite = false }: { lite?: boolean }) {
   const select = useStore((s) => s.select);
   const showLabels = useStore((s) => s.showLabels);
   const showPaths = useStore((s) => s.showPaths);
+  const af = useStore((s) => s.activeFloor);
+  const activeFloor = lite ? "all" : af;
+  const visible = (r: RobotState) => activeFloor === "all" || r.floor === activeFloor || !!r.lift_id;
   return (
     <group>
-      {Object.values(robots).map((r) => (
+      {Object.values(robots).filter(visible).map((r) => (
         <group key={r.id}>
           <RobotMesh r={r} selected={r.id === selected} onSelect={() => select(r.id)} showLabel={showLabels && !lite} lite={lite} />
           {showPaths && !lite && <RobotPath r={r} selected={r.id === selected} />}

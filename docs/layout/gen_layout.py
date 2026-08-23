@@ -7,13 +7,21 @@ import json
 
 W, D = 100, 70
 CELL = 1.0
+F2_ELEV = 8.0            # 二樓（夾層）地板高度
+F2 = (8, 40, 54, 62)     # 二樓 footprint (x0, z0, x1, z1)：蓋在 Zone C 上方，東側接中央走道的電梯
 
 layout = {
     "schema_version": "1.0",
     "id": "wh-main-v1",
     "name": "Main Warehouse (100x70m)",
     "units": "m",
-    "size": {"width": W, "depth": D, "height": 12},
+    "size": {"width": W, "depth": D, "height": 16},
+    "floors": [
+        {"id": 1, "name": "Floor 1", "elevation": 0.0},
+        {"id": 2, "name": "Floor 2 · Mezzanine", "elevation": F2_ELEV,
+         "footprint": [[F2[0], F2[1]], [F2[2], F2[1]], [F2[2], F2[3]], [F2[0], F2[3]]]},
+    ],
+    "lifts": [],
     "grid": {"cell_size": CELL, "cols": int(W / CELL), "rows": int(D / CELL)},
     "zones": [],
     "docks": [],
@@ -40,9 +48,14 @@ zones = {
 }
 for zid, (x0, z0, x1, z1, color) in zones.items():
     layout["zones"].append({
-        "id": zid, "name": f"Zone {zid}", "color": color,
+        "id": zid, "name": f"Zone {zid}", "color": color, "floor": 1,
         "polygon": [[x0, z0], [x1, z0], [x1, z1], [x0, z1]],
     })
+# 二樓整層一個 zone
+layout["zones"].append({
+    "id": "M", "name": "Zone M (Mezzanine)", "color": "#14b8a6", "floor": 2,
+    "polygon": [[F2[0], F2[1]], [F2[2], F2[1]], [F2[2], F2[3]], [F2[0], F2[3]]],
+})
 
 # ── Docks (上方)
 layout["docks"] = [
@@ -66,17 +79,42 @@ for zid, (x0, z0, x1, z1, _) in zones.items():
                 "id": rid, "zone": zid,
                 "position": [x, 0, z], "size": [rack_len, 6.0, rack_depth],
                 "rotation": 0, "levels": 4, "model": "rack_double",
-                "blocks_grid": True,
+                "blocks_grid": True, "floor": 1,
             })
             # 每個 bay 兩側各一個可存取位置 (shelf location)，供任務 source/destination 使用
             for side, dz in (("N", -1.0), ("S", rack_depth + 1.0)):
                 n = loc_id_counter.get(zid, 0) + 1
                 loc_id_counter[zid] = n
                 layout["locations"].append({
-                    "id": f"SHELF-{zid}{n:02d}", "kind": "SHELF", "zone": zid,
+                    "id": f"SHELF-{zid}{n:02d}", "kind": "SHELF", "zone": zid, "floor": 1,
                     "rack_id": rid, "level_range": [1, 4],
                     "access_point": [round(x + rack_len / 2, 1), round(z + dz, 1)],
                 })
+
+# ── Floor 2（夾層）：3 排貨架 × 8 bay，走道 4 m；電梯在東側接中央走道
+m_n = 0
+for r in range(3):
+    z = F2[1] + 4 + r * (rack_depth + aisle)
+    for b in range(8):
+        x = F2[0] + 3 + b * (rack_len + 0.6)
+        rid = f"RACK-M{r+1}{b+1:02d}"
+        layout["racks"].append({
+            "id": rid, "zone": "M", "position": [x, 0, z], "size": [rack_len, 5.0, rack_depth],
+            "rotation": 0, "levels": 3, "model": "rack_double", "blocks_grid": True, "floor": 2,
+        })
+        for side, dz in (("N", -1.0), ("S", rack_depth + 1.0)):
+            m_n += 1
+            layout["locations"].append({
+                "id": f"SHELF-M{m_n:02d}", "kind": "SHELF", "zone": "M", "floor": 2,
+                "rack_id": rid, "level_range": [1, 3],
+                "access_point": [round(x + rack_len / 2, 1), round(z + dz, 1)],
+            })
+
+# ── 電梯（貨梯）：兩座，位於中央走道（一樓可走），也在二樓 footprint 內
+layout["lifts"] = [
+    {"id": "LIFT-1", "cell": [51, 44], "floors": [1, 2], "ride_ticks": 60},
+    {"id": "LIFT-2", "cell": [51, 56], "floors": [1, 2], "ride_ticks": 60},
+]
 
 # ── Conveyors：中央橫向一條 + 左右各一條短的進 packing
 layout["conveyors"] = [
@@ -130,12 +168,15 @@ for zid, (x0, z0, x1, z1, _) in zones.items():
     spots = [(x0 + 0.6, z0 + 1.1 + 1 * 5.2, +1), (x1 - 0.6, z0 + 1.1 + 2 * 5.2, -1), (x0 + 0.6, z0 + 1.1 + 3 * 5.2, +1)]
     for i, (x, z, d) in enumerate(spots, 1):
         layout["cameras"].append({
-            "id": f"CAM-{zid}{i:02d}", "zone": zid, "position": [round(x, 1), 4.5, round(z, 1)],
+            "id": f"CAM-{zid}{i:02d}", "zone": zid, "floor": 1, "position": [round(x, 1), 4.5, round(z, 1)],
             "look_at": [round(x + d * 18, 1), 0.5, round(z, 1)], "fov_deg": 65, "range_m": 30,
         })
 layout["cameras"] += [
-    {"id": "CAM-DOCK-IN", "zone": "A", "position": [33, 6, 2], "look_at": [33, 0, 12], "fov_deg": 80, "range_m": 20},
-    {"id": "CAM-DOCK-OUT", "zone": "B", "position": [67, 6, 2], "look_at": [67, 0, 12], "fov_deg": 80, "range_m": 20},
+    {"id": "CAM-DOCK-IN", "zone": "A", "floor": 1, "position": [33, 6, 2], "look_at": [33, 0, 12], "fov_deg": 80, "range_m": 20},
+    {"id": "CAM-DOCK-OUT", "zone": "B", "floor": 1, "position": [67, 6, 2], "look_at": [67, 0, 12], "fov_deg": 80, "range_m": 20},
+    # 二樓：position/look_at 的 y 為絕對高度（地板 8 m）
+    {"id": "CAM-M01", "zone": "M", "floor": 2, "position": [9.0, F2_ELEV + 4.0, 46.6], "look_at": [27.0, F2_ELEV + 0.5, 46.6], "fov_deg": 65, "range_m": 30},
+    {"id": "CAM-M02", "zone": "M", "floor": 2, "position": [53.0, F2_ELEV + 4.0, 51.8], "look_at": [35.0, F2_ELEV + 0.5, 51.8], "fov_deg": 65, "range_m": 30},
 ]
 
 # ── Sensors
@@ -150,8 +191,13 @@ layout["sensors"] = [
 
 # ── Robot spawn：20 台，從 parking 與 charging 出發
 for i in range(20):
-    x = 40 + (i % 10) * 2.0
-    z = 64 + (i // 10) * 2.0
-    layout["spawn"]["robots"].append({"id": f"R{i+1:02d}", "position": [x, 0, z], "heading": -1.5708, "battery": 70 + (i * 7) % 30})
+    if i >= 16:   # R17–R20 出生在二樓走道
+        x = 14 + (i - 16) * 6.0
+        z = 47
+        layout["spawn"]["robots"].append({"id": f"R{i+1:02d}", "position": [x, 0, z], "heading": 0.0, "battery": 70 + (i * 7) % 30, "floor": 2})
+    else:
+        x = 40 + (i % 10) * 2.0
+        z = 64 + (i // 10) * 2.0
+        layout["spawn"]["robots"].append({"id": f"R{i+1:02d}", "position": [x, 0, z], "heading": -1.5708, "battery": 70 + (i * 7) % 30, "floor": 1})
 
 print(json.dumps(layout, ensure_ascii=False, indent=2))

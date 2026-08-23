@@ -13,6 +13,7 @@ import { ZoneOverlay } from "./ZoneOverlay";
 import { Robots } from "./Robots";
 import { CameraGizmos } from "./Cameras";
 import { People } from "./People";
+import { Mezzanine, FLOOR_ELEV } from "./Mezzanine";
 
 const W = layout.size.width, D = layout.size.depth;
 
@@ -31,8 +32,9 @@ function CameraRig({ controls }: { controls: React.RefObject<OrbitControlsImpl> 
   useEffect(() => {
     if (selected && selected !== prevSel.current) {
       const r = robots[selected];
-      if (r) { goal.current = new THREE.Vector3(r.position[0], 0.5, r.position[2]); // 沿走道方向 (x 軸) 看過去，避免被前方貨架擋住
-        camGoal.current = new THREE.Vector3(r.position[0] + 16, 11, r.position[2] + 2.5); }
+      if (r) { const ey = FLOOR_ELEV[r.floor] ?? 0;
+        goal.current = new THREE.Vector3(r.position[0], ey + 0.5, r.position[2]); // 沿走道方向 (x 軸) 看過去，避免被前方貨架擋住
+        camGoal.current = new THREE.Vector3(r.position[0] + 16, ey + 11, r.position[2] + 2.5); }
     }
     prevSel.current = selected;
   }, [selected, robots]);
@@ -86,13 +88,24 @@ function Background({ env = true }: { env?: boolean }) {
 }
 
 export function SceneContent({ quality, lite = false }: { quality: "low" | "medium" | "high"; lite?: boolean }) {
+  const af = useStore((s) => s.activeFloor);
+  const activeFloor = lite ? "all" : af;   // CCTV / 縮圖用的 lite 場景永遠全樓層
+  const f2 = layout.floors?.find((f) => f.id === 2);
   return (
     <>
       <Background env={!lite} />
       <Lights quality={lite ? "low" : quality} />
-      <WarehouseShell lite={lite} />
-      <RackInstances castShadow={!lite && quality !== "low"} />
-      <Fixtures lite={lite} />
+      <group visible={activeFloor === "all" || activeFloor === 1}>
+        <WarehouseShell lite={lite} />
+        <RackInstances castShadow={!lite && quality !== "low"} floor={1} />
+        <Fixtures lite={lite} />
+      </group>
+      {f2 && (
+        <group visible={activeFloor === "all" || activeFloor === 2}>
+          <Mezzanine lite={lite} />
+          <RackInstances castShadow={false} floor={2} yOffset={f2.elevation} />
+        </group>
+      )}
       <ZoneOverlay labels={!lite} />
       <People lite={lite} />
       <Robots lite={lite} />

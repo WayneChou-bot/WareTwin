@@ -11,7 +11,7 @@ const BOX_PALETTE = ["#b8834a", "#c99a63", "#a87440", "#d2a874", "#9c6b3c"];
  * 160 貨架，每座：立柱 ×4 + 橫樑 ×levels，箱子依 levels 隨機填充 (seed 固定)。
  * 全部走 InstancedMesh：三個 draw call 畫完整個倉庫的貨架與箱子。
  */
-export function RackInstances({ castShadow = true }: { castShadow?: boolean }) {
+export function RackInstances({ castShadow = true, floor = 1, yOffset = 0 }: { castShadow?: boolean; floor?: number; yOffset?: number }) {
   const postRef = useRef<THREE.InstancedMesh>(null!);
   const beamRef = useRef<THREE.InstancedMesh>(null!);
   const boxRef = useRef<THREE.InstancedMesh>(null!);
@@ -21,6 +21,7 @@ export function RackInstances({ castShadow = true }: { castShadow?: boolean }) {
     const posts: THREE.Matrix4[] = [], beams: THREE.Matrix4[] = [];
     const boxes: { m: THREE.Matrix4; c: string }[] = [];
     for (const r of layout.racks) {
+      if ((r.floor ?? 1) !== floor) continue;
       const [x, , z] = r.position; const [w, h, d] = r.size;
       const levelH = h / r.levels;
       for (const [dx, dz] of [[0, 0], [w, 0], [0, d], [w, d]]) {
@@ -45,7 +46,7 @@ export function RackInstances({ castShadow = true }: { castShadow?: boolean }) {
       }
     }
     return { posts, beams, boxes };
-  }, []);
+  }, [floor]);
 
   useLayoutEffect(() => {
     data.posts.forEach((m, i) => postRef.current.setMatrixAt(i, m));
@@ -59,7 +60,7 @@ export function RackInstances({ castShadow = true }: { castShadow?: boolean }) {
   }, [data]);
 
   return (
-    <group>
+    <group position-y={yOffset}>
       <instancedMesh ref={postRef} args={[undefined, undefined, data.posts.length]} castShadow={castShadow} receiveShadow frustumCulled={false}>
         <boxGeometry />
         <meshStandardMaterial color="#2f3a4a" roughness={0.6} metalness={0.6} />

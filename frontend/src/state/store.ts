@@ -49,6 +49,9 @@ interface Store {
   /** 短暫提示（例如後端回 RATE_LIMITED）；null = 不顯示 */
   notice: { text: string; kind: "warn" | "info"; until: number } | null;
   setNotice: (text: string | null, kind?: "warn" | "info") => void;
+  /** 3D / Map 顯示的樓層："all" = 疊起來全顯示 */
+  activeFloor: "all" | number;
+  setActiveFloor: (f: "all" | number) => void;
   drawer: null | "scenarios" | "ops" | "whatif";
   setDrawer: (d: null | "scenarios" | "ops" | "whatif") => void;
   /** 最近一次 What-if 結果（後端回傳，含 schema 外的 window 對照資料） */
@@ -74,6 +77,8 @@ export const useStore = create<Store>((set) => ({
   setModal: (modal) => set({ modal }),
   notice: null,
   setNotice: (text, kind = "warn") => set({ notice: text ? { text, kind, until: Date.now() + 4000 } : null }),
+  activeFloor: "all",
+  setActiveFloor: (activeFloor) => set({ activeFloor }),
   whatif: null,
   setWhatIf: (whatif) => set({ whatif }),
   drawer: null,

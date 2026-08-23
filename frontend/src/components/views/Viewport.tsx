@@ -15,6 +15,8 @@ export function Viewport() {
   const togglePaths = useStore((s) => s.togglePaths);
   const toggleLabels = useStore((s) => s.toggleLabels);
   const focus = useStore((s) => s.focus);
+  const activeFloor = useStore((s) => s.activeFloor);
+  const setActiveFloor = useStore((s) => s.setActiveFloor);
   const toolBtn = (t: SceneTool, icon: JSX.Element, title: string, on = tool === t, onClick = () => setTool(t)) => (
     <button className={on ? "on" : ""} title={title} onClick={onClick}>{icon}</button>
   );
@@ -22,7 +24,11 @@ export function Viewport() {
     <div className="viewport">
       <div className="view-tabs">{TABS.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
       <div className="vp-toolbar">
-        <div className="sel" title="Multi-floor is out of scope for v1">Floor 1 {Icon.chev}</div>
+        <select className="sel" title="Floor" value={String(activeFloor)} onChange={(e) => { const v = e.target.value === "all" ? "all" as const : Number(e.target.value); setActiveFloor(v); if (v === 2) focus([31, 8, 51]); else focus([50, 0, 31]); }}>
+          <option value="all">All floors</option>
+          <option value="1">Floor 1</option>
+          <option value="2">Floor 2</option>
+        </select>
         <button className="icon-btn" title="Reset camera" onClick={() => focus([50, 0, 31])}>{Icon.expand}</button>
         <button className="icon-btn" title="Viewport settings">{Icon.gear}</button>
       </div>

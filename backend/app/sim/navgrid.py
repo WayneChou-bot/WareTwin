@@ -15,9 +15,33 @@ def load_layout(path: str | Path | None = None) -> dict[str, Any]:
         return json.load(f)
 
 
-def build_nav_grid(layout: dict[str, Any]) -> NavGrid:
+def build_nav_grid(layout: dict[str, Any], floor: int = 1) -> NavGrid:
     cols, rows, cs = layout["grid"]["cols"], layout["grid"]["rows"], layout["grid"]["cell_size"]
     cells = bytearray(cols * rows)
+
+    if floor != 1:
+        # 二樓（夾層）：footprint 之外全是障礙；footprint 內可走，再扣掉該樓層貨架（規則與 TS 相同）
+        for i in range(len(cells)):
+            cells[i] = 1
+        fp = next((f.get("footprint") for f in layout.get("floors", []) if f["id"] == floor), None)
+        if fp:
+            xs = [p[0] for p in fp]; zs = [p[1] for p in fp]
+            c0 = max(0, math.floor(min(xs) / cs)); c1 = min(cols - 1, math.ceil(max(xs) / cs) - 1)
+            r0 = max(0, math.floor(min(zs) / cs)); r1 = min(rows - 1, math.ceil(max(zs) / cs) - 1)
+            for r in range(r0, r1 + 1):
+                base = r * cols
+                for c in range(c0, c1 + 1):
+                    cells[base + c] = 0
+        for rk in layout["racks"]:
+            if rk["blocks_grid"] and rk.get("floor", 1) == floor:
+                x, _, z = rk["position"]; w, _, d = rk["size"]
+                c0 = max(0, math.floor(x / cs)); c1 = min(cols - 1, math.ceil((x + w) / cs) - 1)
+                r0 = max(0, math.floor(z / cs)); r1 = min(rows - 1, math.ceil((z + d) / cs) - 1)
+                for r in range(r0, r1 + 1):
+                    base = r * cols
+                    for c in range(c0, c1 + 1):
+                        cells[base + c] = 1
+        return NavGrid(cols=cols, rows=rows, cells=cells)
 
     def fill_rect(x0: float, z0: float, x1: float, z1: float, v: int) -> None:
         c0 = max(0, math.floor(x0 / cs)); c1 = min(cols - 1, math.ceil(x1 / cs) - 1)
@@ -31,7 +55,7 @@ def build_nav_grid(layout: dict[str, Any]) -> NavGrid:
         xs = [p[0] for p in w["polygon"]]; zs = [p[1] for p in w["polygon"]]
         fill_rect(min(xs), min(zs), max(xs), max(zs), 2)
     for r in layout["racks"]:
-        if r["blocks_grid"]:
+        if r["blocks_grid"] and r.get("floor", 1) == 1:
             x, _, z = r["position"]; w, _, d = r["size"]
             fill_rect(x, z, x + w, z + d, 1)
     for c in layout["conveyors"]:

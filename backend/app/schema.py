@@ -215,6 +215,8 @@ class Perception(_Base):
 class RobotState(_Base):
     id: RobotId
     model: str = "AMR-L"
+    floor: int = 1                       # 所在樓層；position 的 y 恆為 0，渲染時加樓層高度
+    lift_id: Optional[str] = None        # 搭乘中的電梯
     position: Vec3
     heading: float
     velocity: float = Field(ge=0)
@@ -313,6 +315,7 @@ class PersonState(_Base):
     position: Vec3
     heading: float = 0
     zone: Optional[ZoneId] = None
+    floor: int = 1
     expires_tick: Optional[int] = None
 
 
@@ -555,6 +558,7 @@ class MsgHeatmap(_Base):
 
 class MsgWhatIfResult(_Base):
     type: Literal["WHATIF_RESULT"] = "WHATIF_RESULT"
+    request_id: Optional[str] = None   # 回傳 CmdWhatIfRun.request_id
     result: WhatIfResult
 
 
@@ -576,6 +580,7 @@ class MsgError(_Base):
     type: Literal["ERROR"] = "ERROR"
     code: str
     message: str
+    request_id: Optional[str] = None   # 可關聯的請求（COPILOT_ASK / WHATIF_RUN）
 
 
 ServerMessage = Annotated[

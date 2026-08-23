@@ -143,6 +143,10 @@ export interface Perception {
 export interface RobotState {
   id: RobotId;
   model: string;                 // "AMR-L" 等，對應 GLB 模型名
+  /** 所在樓層（1 = 地面）；position 的 y 恆為 0，渲染時加上樓層高度 */
+  floor: number;
+  /** 搭乘中的電梯 id；null = 不在電梯上 */
+  lift_id: string | null;
   position: Vec3;
   /** 航向角 (弧度)，繞 y 軸，0 = +x 方向 */
   heading: number;
@@ -247,6 +251,7 @@ export interface PersonState {
   position: Vec3;
   heading: number;
   zone: ZoneId | null;
+  floor?: number;
   /** 到此 tick 自動消失；null = 永久 (需手動清除) */
   expires_tick: number | null;
 }

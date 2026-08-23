@@ -9,7 +9,7 @@ import { SceneContent } from "../scene/Scene3D";
 import type { RobotState } from "../../schema/twin_state";
 
 function RobotThumb({ status }: { status: string }) {
-  const r = useMemo(() => ({ id: "", model: "AMR-L", position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 }, perception: { state: "CLEAR" as const, ahead_m: 4, nearest_m: null, obstacles: [] } }), [status]);
+  const r = useMemo(() => ({ id: "", model: "AMR-L", floor: 1, lift_id: null, position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 }, perception: { state: "CLEAR" as const, ahead_m: 4, nearest_m: null, obstacles: [] } }), [status]);
   return (
     <Canvas resize={{ offsetSize: true }} dpr={1} camera={{ position: [2.2, 1.6, 2.2], fov: 32 }} gl={{ alpha: true, antialias: true }} style={{ background: "transparent" }}>
       <ambientLight intensity={0.8} /><directionalLight position={[3, 5, 2]} intensity={2} /><pointLight position={[-2, 1, -2]} color="#60a5fa" intensity={4} />
@@ -39,6 +39,7 @@ export function SelectedRobotPanel() {
     <Panel title="Selected Robot">
       <div className="robot-head">
         <span className="id">{r.id}</span>
+        {(r.floor > 1 || r.lift_id) && <span className="floor-chip">{r.lift_id ? `🛗 ${r.lift_id}` : `F${r.floor}`}</span>}
         <span className="status-text" style={{ color: col }}><Dot color={col} />{r.status[0] + r.status.slice(1).toLowerCase()}</span>
       </div>
       <div className="robot-img"><RobotThumb status={r.status} /></div>
@@ -71,7 +72,7 @@ export function LiveCameraPanel() {
   const camStatus = useStore((s) => s.twin.cameras);
   const cam = layout.cameras.find((c) => c.id === active) ?? layout.cameras[0];
   const isDock = cam.id.startsWith("CAM-DOCK");
-  const groups: Array<[string, string]> = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["DOCK", "Dock"]];
+  const groups: Array<[string, string]> = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["M", "F2"], ["DOCK", "Dock"]];
   const camsOf = (g: string) => layout.cameras.filter((c) => (g === "DOCK" ? c.id.startsWith("CAM-DOCK") : !c.id.startsWith("CAM-DOCK") && c.zone === g));
   const curGroup = isDock ? "DOCK" : cam.zone;
   const zoneCams = camsOf(curGroup);

@@ -38,6 +38,7 @@ It runs on a laptop with an integrated GPU — no RTX, no ROS, no cloud required
 | ⚡ **Scenario injection** | Robot failure, low battery, conveyor stop, human intrusion (zone block + re-route), traffic congestion, camera outage, demand burst — one click each, all reversible. |
 | 🔮 **What-if simulation** | Clone the live twin, inject, run 1–10 min, compare 12 metrics against a baseline with the same random seed. The live system is never touched. |
 | 💬 **AI Operations Copilot** | Ask "Why is throughput dropping?" — the answer is grounded in the live state and cites robots / tasks / events you can click. LLM optional (see [AI modes](#-ai-modes)). |
+| 🏢 **Multi-floor & freight lifts** | A mezzanine second floor with its own racks, zone, cameras and nav grid. Robots ride two freight lifts between floors — cross-floor tasks plan to the lift, wait their turn, ride up/down (animated in 3D) and re-plan on arrival. The Fleet Manager penalises cross-floor assignments so same-floor robots win when available. |
 | 📡 **On-robot perception** | Each AMR carries a virtual 270° / 4 m LiDAR: it sees other robots and people (with line-of-sight occlusion by racks), slows down and holds distance instead of relying on grid reservations alone, and reports `CLEAR / SLOWING / STOPPED` plus the obstacles it sees — visualised as a sensor fan in 3D. |
 | 👁️ **VLM perception** | Send a virtual CCTV frame to a vision model → `{event, severity, bbox, confidence}` drawn on the feed. |
 | 🔌 **Real-time sync** | FastAPI + WebSocket: one `FULL` state, then per-tick `PATCH` diffs (~12 KB/s). If the backend is unreachable the browser falls back to a built-in TypeScript engine and keeps running. |
@@ -98,9 +99,9 @@ WareTwin/
 ## 🧪 Tests
 
 ```bash
-cd backend && python -m pytest -q      # 33 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
+cd backend && python -m pytest -q      # 39 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
-cd frontend && npm test                 # 10 tests: same engine contract in TypeScript
+cd frontend && npm test                 # 12 tests: same engine contract in TypeScript
 ```
 
 ## ☁️ Deployment
@@ -123,8 +124,8 @@ Reads (`/api/state`, `/api/health`, …) are never limited. `TWIN_RATE_LIMIT=0` 
 
 ## 🗺 Roadmap
 
-- [x] Phase 1 – 3D foundation · [x] Phase 2 – robot simulation · [x] Phase 3 – backend + WebSocket · [x] Phase 4 – operations · [x] Phase 5 – AI · [x] Phase 6 – What-if · [x] Phase 7 – on-robot perception & local avoidance
-- [ ] Phase 8 – Robotics extension: feed robot poses from ROS 2 / Webots into `SimEngine.step()`; the Twin State contract and UI stay unchanged
+- [x] Phase 1 – 3D foundation · [x] Phase 2 – robot simulation · [x] Phase 3 – backend + WebSocket · [x] Phase 4 – operations · [x] Phase 5 – AI · [x] Phase 6 – What-if · [x] Phase 7 – on-robot perception · [x] Phase 8 – multi-floor + freight lifts, animated conveyors
+- [ ] Phase 9 – Robotics extension: feed robot poses from ROS 2 / Webots into `SimEngine.step()`; the Twin State contract and UI stay unchanged
 - [ ] Multi-agent path planning (CBS / time-window reservations) to replace the yield/back-off deadlock breaker
 - [ ] PostgreSQL + Redis for multi-instance deployments
 

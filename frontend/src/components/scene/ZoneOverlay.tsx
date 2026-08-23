@@ -1,16 +1,20 @@
 import { Html, Line } from "@react-three/drei";
 import { layout, useStore } from "../../state/store";
+import { FLOOR_ELEV } from "./Mezzanine";
 
 /** Zone 地面霓虹邊框 + 浮動標籤；BLOCKED 紅、CONGESTED 橘 */
 export function ZoneOverlay({ labels = true }: { labels?: boolean }) {
   const zones = useStore((s) => s.twin.zones);
   const focus = useStore((s) => s.focus);
+  const af = useStore((s) => s.activeFloor);
+  const activeFloor = labels ? af : "all";   // lite 場景（CCTV）全樓層
   return (
     <group>
-      {layout.zones.map((z) => {
+      {layout.zones.filter((z) => activeFloor === "all" || (z.floor ?? 1) === activeFloor).map((z) => {
         const st = zones[z.id]?.status ?? "NORMAL";
         const color = st === "BLOCKED" ? "#ef4444" : st === "CONGESTED" ? "#f97316" : z.color;
-        const pts = [...z.polygon, z.polygon[0]].map(([x, zz]) => [x, 0.03, zz] as [number, number, number]);
+        const ey = FLOOR_ELEV[z.floor ?? 1] ?? 0;
+        const pts = [...z.polygon, z.polygon[0]].map(([x, zz]) => [x, ey + 0.03, zz] as [number, number, number]);
         const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]);
         const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
         const w = Math.max(...xs) - Math.min(...xs), d = Math.max(...zs) - Math.min(...zs);
@@ -21,14 +25,14 @@ export function ZoneOverlay({ labels = true }: { labels?: boolean }) {
           <group key={z.id}>
             <Line points={pts} color={color} lineWidth={1.6} transparent opacity={0.9} />
             {st !== "NORMAL" && (
-              <mesh position={[cx, 0.02, cz]} rotation-x={-Math.PI / 2}>
+              <mesh position={[cx, ey + 0.02, cz]} rotation-x={-Math.PI / 2}>
                 <planeGeometry args={[w, d]} />
                 <meshBasicMaterial color={color} transparent opacity={0.08} />
               </mesh>
             )}
             {labels && (
-              <Html position={[lx, 1.2, lz]} zIndexRange={[30, 20]}>
-                <div className="zone-lbl" style={{ color, borderColor: color }} onClick={() => focus([cx, 0, cz])}>
+              <Html position={[lx, ey + 1.2, lz]} zIndexRange={[30, 20]}>
+                <div className="zone-lbl" style={{ color, borderColor: color }} onClick={() => focus([cx, ey, cz])}>
                   {z.name.toUpperCase()}{st === "CONGESTED" ? " ⚠" : st === "BLOCKED" ? " ⛔" : ""}
                 </div>
               </Html>

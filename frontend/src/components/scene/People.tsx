@@ -1,5 +1,6 @@
 import { Html } from "@react-three/drei";
 import { useStore } from "../../state/store";
+import { FLOOR_ELEV } from "./Mezzanine";
 
 /** 人員 / 堆高機 NPC；Phase 1 為靜態裝飾，Phase 4 由故障注入驅動 */
 export function People({ lite = false }: { lite?: boolean }) {
@@ -11,12 +12,15 @@ export function People({ lite = false }: { lite?: boolean }) {
     <group>
       {staticWorkers.map((p, i) => <Worker key={i} position={p} heading={i * 1.1} />)}
       <Forklift position={forklift} />
-      {Object.values(people).map((p) => (
-        <group key={p.id}>
-          {p.kind === "WORKER" ? <Worker position={p.position} heading={p.heading} alert /> : <Forklift position={p.position} heading={p.heading} />}
-          {!lite && <Html position={[p.position[0], 2.3, p.position[2]]} center zIndexRange={[12, 0]}><div className="lbl err">⚠ HUMAN</div></Html>}
-        </group>
-      ))}
+      {Object.values(people).map((p) => {
+        const ey = FLOOR_ELEV[p.floor ?? 1] ?? 0;
+        return (
+          <group key={p.id} position-y={ey}>
+            {p.kind === "WORKER" ? <Worker position={p.position} heading={p.heading} alert /> : <Forklift position={p.position} heading={p.heading} />}
+            {!lite && <Html position={[p.position[0], 2.3, p.position[2]]} center zIndexRange={[12, 0]}><div className="lbl err">⚠ HUMAN</div></Html>}
+          </group>
+        );
+      })}
     </group>
   );
 }

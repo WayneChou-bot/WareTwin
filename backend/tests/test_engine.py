@@ -27,8 +27,9 @@ def test_astar_path_valid():
 
 
 def test_all_access_points_walkable():
-    g = build_nav_grid(L)
+    grids = {1: build_nav_grid(L), 2: build_nav_grid(L, 2)}
     for l in L["locations"]:
+        g = grids[l.get("floor", 1)]
         c, r = to_cell(*l["access_point"])
         assert g.cells[r * g.cols + c] != 1, l["id"]
 
@@ -52,6 +53,8 @@ def test_20_minutes_no_collisions_and_schema_valid():
                 assert 0 <= r["battery"] <= 100
             for i in range(len(rs)):
                 for j in range(i + 1, len(rs)):
+                    if rs[i]["floor"] != rs[j]["floor"] or rs[i]["lift_id"] or rs[j]["lift_id"]:
+                        continue   # 不同樓層的 2D 座標會重疊，物理間距只看同樓層
                     d = ((rs[i]["position"][0] - rs[j]["position"][0]) ** 2 + (rs[i]["position"][2] - rs[j]["position"][2]) ** 2) ** 0.5
                     min_d = min(min_d, d)
     assert e.state["kpi"]["operation"]["completed_today"] > 40
@@ -96,3 +99,30 @@ def test_human_intrusion_blocks_and_clears():
     assert e.state["zones"]["B"]["status"] == "BLOCKED"
     for _ in range(700): e.step()
     assert e.state["zones"]["B"]["status"] != "BLOCKED"
+
+
+def test_cross_floor_task_rides_lift():
+    """二樓貨架 → 一樓包裝站：機器人要搭電梯、樓層會切換、任務完成。"""
+    from app.sim.navgrid import load_layout
+    e = SimEngine(load_layout(), seed=7)
+    t = e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
+    boarded = False; floors = set()
+    for _ in range(24000):
+        e.step()
+        if t["assigned_robot"]:
+            r = e.state["robots"][t["assigned_robot"]]
+            floors.add(r["floor"])
+            if r["lift_id"]:
+                boarded = True
+        if t["status"] == "COMPLETED":
+            break
+    assert t["status"] == "COMPLETED" and boarded and floors == {1, 2}
+
+
+def test_floor2_grid_matches_ts_rules():
+    from app.sim.navgrid import build_nav_grid, load_layout
+    g2 = build_nav_grid(load_layout(), 2)
+    at = lambda x, z: g2.cells[int(z) * g2.cols + int(x)]
+    assert at(51.5, 44.5) != 1   # 電梯格
+    assert at(20.5, 47.5) != 1   # 夾層走道
+    assert at(80, 20) == 1       # footprint 外

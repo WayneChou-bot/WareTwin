@@ -15,6 +15,8 @@ def test_perception_keeps_distance_and_reports():
         for i in range(len(rs)):
             for j in range(i + 1, len(rs)):
                 a, b = rs[i], rs[j]
+                if a["floor"] != b["floor"] or a["lift_id"] or b["lift_id"]:
+                    continue
                 d = math.hypot(a["position"][0] - b["position"][0], a["position"][2] - b["position"][2])
                 min_d = min(min_d, d)
     assert seen > 0 and stops + slows > 0

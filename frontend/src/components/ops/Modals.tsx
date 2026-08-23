@@ -157,7 +157,7 @@ function FleetList() {
           ))}
         </div>
         <table className="dt full">
-          <thead><tr><Th k="id">Robot</Th><Th k="status">Status</Th><th>State</th><Th k="battery">Battery</Th><th>Task</th><th>Zone</th><th>Speed</th><th>Perception</th><Th k="tasks">Done</Th><Th k="distance">Distance</Th></tr></thead>
+          <thead><tr><Th k="id">Robot</Th><th>Floor</th><Th k="status">Status</Th><th>State</th><Th k="battery">Battery</Th><th>Task</th><th>Zone</th><th>Speed</th><th>Perception</th><Th k="tasks">Done</Th><Th k="distance">Distance</Th></tr></thead>
           <tbody>
             {rows.map((r) => {
               const t = r.current_task_id ? tasks[r.current_task_id] : null;
@@ -165,6 +165,7 @@ function FleetList() {
               return (
                 <tr key={r.id} onClick={() => { select(r.id); setModal(null); }} style={{ cursor: "pointer" }}>
                   <td style={{ fontWeight: 700 }}>{r.id}</td>
+                  <td style={{ color: r.floor > 1 || r.lift_id ? "#a78bfa" : undefined }}>{r.lift_id ? `🛗 ${r.lift_id}` : `F${r.floor}`}</td>
                   <td style={{ color: col }}><Dot color={col} />{r.status[0] + r.status.slice(1).toLowerCase()}</td>
                   <td>{r.fsm}</td>
                   <td style={{ color: r.battery < 10 ? "#ef4444" : r.battery < 20 ? "#f97316" : undefined }}>{r.battery.toFixed(0)}%</td>
