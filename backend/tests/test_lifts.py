@@ -117,6 +117,34 @@ def test_lift_fault_clear_resumes_from_frozen_height_no_teleport():
     assert t["status"] == "COMPLETED"
 
 
+def test_decision_lift_matches_actual_route():
+    """派工稽核寫的電梯 = 機器人實際排入的電梯（round-6 P2：planned_lift_id 綁定）"""
+    import re
+    e = SimEngine(L, seed=9)
+    audited = None; rid = None
+    for _ in range(60000):
+        e.step()
+        if not e.state["recent_decisions"]:
+            continue
+        d = e.state["recent_decisions"][0]
+        if d["tick"] != e.state["sim"]["tick"]:
+            continue
+        c = next((x for x in d["candidates"] if x["robot_id"] == d["selected_robot"]), None)
+        m = next((mm for mm in (re.search(r"cross-floor via (LIFT-\d+)", s) for s in (c["reasons"] if c else [])) if mm), None)
+        if m:
+            audited = m.group(1); rid = d["selected_robot"]; break
+    assert audited, "no cross-floor assignment observed"
+    actual = None
+    for _ in range(5000):
+        e.step()
+        for lid, L_ in e.state["lifts"].items():
+            if rid in L_["queue"]["1"] or rid in L_["queue"]["2"] or L_["reserved_by"] == rid or L_["occupant"] == rid:
+                actual = lid; break
+        if actual:
+            break
+    assert actual == audited
+
+
 def test_cancelled_robot_releases_lift():
     e, t = _boot()
     rid = None

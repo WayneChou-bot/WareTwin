@@ -7,7 +7,7 @@ export function People({ lite = false }: { lite?: boolean }) {
   const people = useStore((s) => s.twin.people);
   const af = useStore((s) => s.activeFloor);
   const activeFloor = lite || af === "exploded" ? "all" : af;
-  const explodeY = (floor: number) => (af === "exploded" && floor === 2 ? 5 : 0);
+  const explodeY = (floor: number) => (!lite && af === "exploded" && floor === 2 ? 5 : 0);   // lite（CCTV）場景平台不上移，人員也不能移
   const show = (floor: number) => activeFloor === "all" || floor === activeFloor;
   // Phase 1：固定幾個穿螢光背心的工作人員與一台堆高機（一樓裝飾），讓畫面有生氣
   const staticWorkers: Array<[number, number, number]> = [[33, 0, 9], [66, 0, 9], [12, 0, 66], [89, 0, 60]];

@@ -87,6 +87,8 @@ interface RobotRt {
   /** 跨樓層：抵達電梯後要繼續前往的目標 */
   pending: { point: [number, number]; phase: RobotRt["phase"]; locId: string | null; floor: number } | null;
   liftId: string | null;
+  /** 派工當下稽核記錄的電梯（round-6 P2）：planTo 跨樓層時優先使用，確保 Decision reasons 與實際路線一致 */
+  plannedLiftId: string | null;
   /** 電梯子狀態機（規格書 §10）：null → TO_LIFT → QUEUED → BOARDING → RIDING → ALIGHTING → null */
   liftStage: null | "TO_LIFT" | "QUEUED" | "BOARDING" | "RIDING" | "ALIGHTING";
   liftEnqueuedTick: number;
@@ -140,8 +142,59 @@ export class SimEngine {
     this.state = opts.initialState ? JSON.parse(JSON.stringify(opts.initialState)) : this.buildInitialState(seed);
     for (const r of Object.values(this.state.robots)) { if (!r.perception) r.perception = { state: "CLEAR", ahead_m: SIM.LIDAR_RANGE, nearest_m: null, obstacles: [] }; if (r.floor === undefined) r.floor = 1; if (r.lift_id === undefined) r.lift_id = null; if (r.lift_stage === undefined) r.lift_stage = null; }
     if (!this.state.lifts) this.state.lifts = {};
-    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0, liftExit: null, liftBlockedTicks: 0 };
+    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, plannedLiftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0, liftExit: null, liftBlockedTicks: 0 };
     this.nextTaskTick = this.state.sim.tick + 10;
+    if (opts.initialState) this.rehydrate();   // WS 斷線 → LOCAL 接手：從公開狀態反推私有 runtime，模擬才真正連續
+  }
+
+  /** 從公開 TwinState 反推引擎私有 runtime（round-6 P1）：行進中的機器人不會「瞬間抵達」、
+   *  電梯行程不中斷、任務/事件/決策序號延續不重複。反推不出來的個案安全釋放資源後重新規劃。 */
+  private rehydrate() {
+    const S = this.state;
+    const num = (id: string) => { const m = /(\d+)$/.exec(id); return m ? parseInt(m[1], 10) : 0; };
+    for (const id in S.tasks) this.taskSeq = Math.max(this.taskSeq, num(id) + 1);
+    for (const e of S.recent_events) this.eventSeq = Math.max(this.eventSeq, num(e.id));
+    for (const d of S.recent_decisions) this.decisionSeq = Math.max(this.decisionSeq, num(d.id));
+    this.completedCount = S.kpi.operation.completed_today;
+    this.onTime = Math.round(S.kpi.operation.on_time_rate * this.completedCount);
+    const series = S.kpi.throughput_series;
+    this.lastSeriesTick = series.length ? series[series.length - 1].tick : S.sim.tick;
+    for (const zid in S.zones) if (S.zones[zid].blocked_reason) this.blockedZones.add(zid);
+    for (const aid in S.alerts) if (aid.startsWith("traffic-")) { const zid = aid.slice(8); this.congestedZones.set(zid, { level: Math.max(0.3, S.zones[zid]?.congestion ?? 0.5), until: S.sim.tick + 600 }); }
+    for (const rid in S.robots) {
+      const r = S.robots[rid]; const rt = this.rt[rid];
+      const task = r.current_task_id ? S.tasks[r.current_task_id] : undefined;
+      rt.phase = r.fsm === "NAVIGATING" || r.fsm === "TASK_ASSIGNED" ? "TO_SOURCE"
+        : r.fsm === "TRANSPORTING" ? "TO_DEST"
+        : r.fsm === "GOING_TO_CHARGE" || r.fsm === "CHARGING" ? "TO_CHARGER"
+        : null;
+      rt.goalLoc = r.destination;
+      if (r.path.length && r.path_index < r.path.length) { const last = r.path[r.path.length - 1]; rt.target = [last[0], last[1]]; }
+      if (r.fsm === "PICKING") rt.dwell = Math.max(1, SIM.PICK_TICKS - (S.sim.tick - r.fsm_since_tick));
+      if (r.fsm === "DELIVERING") rt.dwell = Math.max(1, SIM.DROP_TICKS - (S.sim.tick - r.fsm_since_tick));
+      if ((r.fsm === "GOING_TO_CHARGE" || r.fsm === "CHARGING") && r.destination && r.destination in this.chargerBusy) { rt.chargerId = r.destination; this.chargerBusy[r.destination] = rid; }
+      rt.lastBatteryAlert = r.battery < THRESHOLDS.BATTERY_CRITICAL ? "CRIT" : r.battery < THRESHOLDS.BATTERY_WARNING ? "WARN" : "NONE";
+      if (r.lift_stage) {
+        // 電梯行程：queue / occupant / reserved_by 本來就在 state.lifts 裡，這裡補回 pending 與子狀態
+        let liftId = r.lift_id;
+        if (!liftId) for (const lid in S.lifts) { const L = S.lifts[lid]; if (L.occupant === rid || L.reserved_by === rid || L.queue["1"].includes(rid) || L.queue["2"].includes(rid)) { liftId = lid; break; } }
+        const loc = r.destination ? this.loc[r.destination] : undefined;
+        const chg = !loc && r.destination ? this.layout.charging_stations.find((c) => c.id === r.destination) : undefined;
+        const goal = loc ? { point: [loc.access_point[0], loc.access_point[1]] as [number, number], floor: loc.floor ?? 1 }
+          : chg ? { point: [chg.access_point[0], chg.access_point[1]] as [number, number], floor: 1 } : null;
+        if (liftId && goal) {
+          rt.liftId = liftId; rt.liftStage = r.lift_stage;
+          rt.pending = { point: goal.point, phase: rt.phase ?? "TO_SOURCE", locId: r.destination, floor: goal.floor };
+          rt.liftEnqueuedTick = S.sim.tick;
+          if (r.lift_stage !== "TO_LIFT") rt.target = null;   // QUEUED / BOARDING / RIDING / ALIGHTING 走 microMove，不走網格
+        } else {
+          // 反推不出完整行程：安全釋放電梯資源，回頭重新規劃（比帶著半套狀態亂走安全）
+          this.releaseRobotFromLift(rid);
+          r.path = []; r.path_index = 0; rt.target = null; rt.pending = null; rt.phase = null;
+          this.setFsm(r, task ? "TASK_ASSIGNED" : "IDLE");
+        }
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -278,6 +331,7 @@ export class SimEngine {
       if (!idle.length) return;
       const src = this.loc[task.source]; if (!src) { task.status = "FAILED"; continue; }
       const srcFloor = src.floor ?? 1;
+      const liftPick: Record<string, string> = {};   // 每台候選當下算出的最佳電梯（round-6 P2：稽核與實際路線綁定）
       const cands: DecisionCandidate[] = idle.map((r) => {
         // 跨樓層：地面距離 + 固定懲罰 + 「實際電梯狀態」的預估等待（排隊長度/忙碌/所在樓層），換算成等效距離
         const flat = Math.hypot(r.position[0] - src.access_point[0], r.position[2] - src.access_point[1]);
@@ -288,6 +342,7 @@ export class SimEngine {
             ? Math.round((best.cost - Math.hypot(r.position[0] - (best.l.cell[0] - 1.5), r.position[2] - (best.l.cell[1] + 0.5)) / (SIM.MAX_SPEED * 0.8)) * 10) / 10
             : 60;
           liftInfo = { id: best && best.cost < Infinity ? best.l.id : "—", waitS };
+          if (liftInfo.id !== "—") liftPick[r.id] = liftInfo.id;
           d = flat + SIM.LIFT_XFLOOR_PENALTY_M + waitS * SIM.MAX_SPEED * 0.8;
         }
         const zone = r.zone ? S.zones[r.zone] : null;
@@ -306,6 +361,7 @@ export class SimEngine {
       idle.splice(idle.indexOf(robot), 1);
       task.status = "ASSIGNED"; task.assigned_robot = robot.id; task.assigned_tick = S.sim.tick;
       robot.current_task_id = task.id;
+      this.rt[robot.id].plannedLiftId = liftPick[robot.id] ?? null;   // planTo 跨樓層時優先使用稽核記錄的電梯
       this.setFsm(robot, "TASK_ASSIGNED");
       const decision: AiDecision = { id: `D${++this.decisionSeq}`, tick: S.sim.tick, kind: "TASK_ASSIGNMENT", task_id: task.id, selected_robot: robot.id, candidates: cands.slice(0, 5), weights, narrative: null };
       S.recent_decisions.unshift(decision); if (S.recent_decisions.length > 50) S.recent_decisions.pop();
@@ -740,7 +796,9 @@ export class SimEngine {
     const L = this.state.lifts[l.id];
     if (L.fault) return Infinity;
     const approach = Math.hypot(r.position[0] - (l.cell[0] - 1.5), r.position[2] - (l.cell[1] + 0.5)) / (SIM.MAX_SPEED * 0.8);
-    const queueLen = L.queue["1"].length + L.queue["2"].length + (L.reserved_by ? 1 : 0);
+    // 預約者上車前仍留在 queue 裡，只有「不在任一 queue」（已離隊上車中）才額外 +1，避免重複計等待成本
+    const reservedExtra = L.reserved_by && !L.queue["1"].includes(L.reserved_by) && !L.queue["2"].includes(L.reserved_by) ? 1 : 0;
+    const queueLen = L.queue["1"].length + L.queue["2"].length + reservedExtra;
     const perService = (SIM.LIFT_DOOR_TICKS * 4 + SIM.LIFT_TRAVEL_TICKS + SIM.LIFT_LEVEL_TICKS + SIM.LIFT_COOLDOWN_TICKS + 40) * SIM.TICK_S;
     const busy = L.state === "IDLE" ? 0 : perService * 0.5;
     const wrongFloor = L.floor !== null && L.floor !== r.floor ? SIM.LIFT_TRAVEL_TICKS * SIM.TICK_S : 0;
@@ -756,7 +814,10 @@ export class SimEngine {
     const tf = targetFloor ?? (locId ? this.loc[locId]?.floor ?? 1 : r.floor);
     if (tf !== r.floor) {
       // 跨樓層（規格書 §7）：Origin → 排隊格（A*）→ 電梯狀態機（stepLifts/handleLift）→ 目的樓層重新規劃
-      const lift = this.pickLift(r);
+      // 派工時稽核記錄了哪座電梯就優先用哪座（只有它已 FAULT 才重挑），用完即清（round-6 P2）
+      const preferred = rt.plannedLiftId ? this.layout.lifts.find((l) => l.id === rt.plannedLiftId && !this.state.lifts[l.id].fault) ?? null : null;
+      rt.plannedLiftId = null;
+      const lift = preferred ?? this.pickLift(r);
       rt.pending = { point, phase, locId, floor: tf };
       if (!lift) { rt.liftId = this.layout.lifts[0]?.id ?? null; this.setLiftStage(r, rt, "TO_LIFT"); rt.target = null; r.path = []; r.path_index = 0; rt.liftRetryTick = this.state.sim.tick + SIM.LIFT_RETRY_TICKS; return; }
       rt.liftId = lift.id;

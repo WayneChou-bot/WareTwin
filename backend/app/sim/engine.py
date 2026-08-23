@@ -71,7 +71,7 @@ def _sign(x: float) -> float:
 class RobotRt:
     __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point",
                  "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_stage", "lift_enqueued_tick", "lift_retry_tick",
-                 "lift_exit", "lift_blocked_ticks")
+                 "lift_exit", "lift_blocked_ticks", "planned_lift_id")
 
     def __init__(self) -> None:
         self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
@@ -82,6 +82,8 @@ class RobotRt:
         self.pending: Optional[dict[str, Any]] = None; self.lift_id: Optional[str] = None
         self.lift_stage: Optional[str] = None; self.lift_enqueued_tick = 0; self.lift_retry_tick = 0
         self.lift_exit: Optional[tuple[float, float]] = None; self.lift_blocked_ticks = 0
+        # 派工當下稽核記錄的電梯（round-6 P2）：_plan_to 跨樓層時優先使用，確保 Decision reasons 與實際路線一致
+        self.planned_lift_id: Optional[str] = None
 
 
 class SimEngine:
@@ -322,6 +324,7 @@ class SimEngine:
             if not src:
                 task["status"] = "FAILED"; continue
             src_floor = src.get("floor", 1)
+            lift_pick: dict[str, str] = {}   # 每台候選當下算出的最佳電梯（round-6 P2：稽核與實際路線綁定）
             cands = []
             for r in idle:
                 # 跨樓層：地面距離 + 固定懲罰 + 「實際電梯狀態」的預估等待（排隊長度/忙碌/所在樓層），換算成等效距離
@@ -334,6 +337,7 @@ class SimEngine:
                         approach = math.hypot(r["position"][0] - (best_l["l"]["cell"][0] - 1.5), r["position"][2] - (best_l["l"]["cell"][1] + 0.5)) / (SIM["MAX_SPEED"] * 0.8)
                         wait_s = jsround((best_l["cost"] - approach) * 10) / 10
                         lift_info = {"id": best_l["l"]["id"], "waitS": wait_s}
+                        lift_pick[r["id"]] = best_l["l"]["id"]
                     else:
                         lift_info = {"id": "—", "waitS": 60}
                     d = flat + SIM["LIFT_XFLOOR_PENALTY_M"] + lift_info["waitS"] * SIM["MAX_SPEED"] * 0.8
@@ -362,6 +366,7 @@ class SimEngine:
             idle.remove(robot)
             task["status"] = "ASSIGNED"; task["assigned_robot"] = robot["id"]; task["assigned_tick"] = S["sim"]["tick"]
             robot["current_task_id"] = task["id"]
+            self.rt[robot["id"]].planned_lift_id = lift_pick.get(robot["id"])   # _plan_to 跨樓層時優先使用稽核記錄的電梯
             self._set_fsm(robot, "TASK_ASSIGNED")
             self.decision_seq += 1
             S["recent_decisions"].insert(0, {"id": f"D{self.decision_seq}", "tick": S["sim"]["tick"], "kind": "TASK_ASSIGNMENT", "task_id": task["id"],
@@ -819,7 +824,10 @@ class SimEngine:
         if L["fault"]:
             return math.inf
         approach = math.hypot(r["position"][0] - (l["cell"][0] - 1.5), r["position"][2] - (l["cell"][1] + 0.5)) / (SIM["MAX_SPEED"] * 0.8)
-        queue_len = len(L["queue"]["1"]) + len(L["queue"]["2"]) + (1 if L["reserved_by"] else 0)
+        # 預約者上車前仍留在 queue 裡，只有「不在任一 queue」（已離隊上車中）才額外 +1，避免重複計等待成本
+        rb = L["reserved_by"]
+        reserved_extra = 1 if rb and rb not in L["queue"]["1"] and rb not in L["queue"]["2"] else 0
+        queue_len = len(L["queue"]["1"]) + len(L["queue"]["2"]) + reserved_extra
         per_service = (SIM["LIFT_DOOR_TICKS"] * 4 + SIM["LIFT_TRAVEL_TICKS"] + SIM["LIFT_LEVEL_TICKS"] + SIM["LIFT_COOLDOWN_TICKS"] + 40) * SIM["TICK_S"]
         busy = 0 if L["state"] == "IDLE" else per_service * 0.5
         wrong_floor = SIM["LIFT_TRAVEL_TICKS"] * SIM["TICK_S"] if (L["floor"] is not None and L["floor"] != r["floor"]) else 0
@@ -833,7 +841,14 @@ class SimEngine:
         tf = target_floor if target_floor is not None else (self.loc[loc_id].get("floor", 1) if loc_id and loc_id in self.loc else r["floor"])
         if tf != r["floor"]:
             # 跨樓層（規格書 §7）：Origin → 排隊格（A*）→ 電梯狀態機 → 目的樓層重新規劃
-            lift = self._pick_lift(r)
+            # 派工時稽核記錄了哪座電梯就優先用哪座（只有它已 FAULT 才重挑），用完即清（round-6 P2）
+            preferred = None
+            if rt.planned_lift_id:
+                pl = next((l for l in self.layout["lifts"] if l["id"] == rt.planned_lift_id), None)
+                if pl is not None and not self.state["lifts"][pl["id"]]["fault"]:
+                    preferred = pl
+            rt.planned_lift_id = None
+            lift = preferred or self._pick_lift(r)
             rt.pending = {"point": point, "phase": phase, "loc_id": loc_id, "floor": tf}
             if lift is None:   # 全部故障：原地等，定期重試
                 rt.lift_id = self.layout["lifts"][0]["id"] if self.layout["lifts"] else None

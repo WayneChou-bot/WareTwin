@@ -216,3 +216,76 @@ describe("lift state machine (spec §9–§14)", () => {
     expect(t.status).toBe("COMPLETED");
   }, 90000);
 });
+
+describe("rehydration — WS 斷線後 LOCAL 引擎接手（round-6 P1）", () => {
+  const snapshotOf = (e: SimEngine) => JSON.parse(JSON.stringify(e.state));
+
+  it("行進中的機器人不會瞬間抵達（NAVIGATING 不得下一 tick 就變 PICKING）", () => {
+    const a = new SimEngine(layout, { seed: 21 });
+    let rid: string | null = null;
+    for (let i = 0; i < 20000 && !rid; i++) {
+      a.step();
+      for (const r of Object.values(a.state.robots)) if (r.fsm === "NAVIGATING" && !r.lift_stage && r.path.length - r.path_index > 6) { rid = r.id; break; }
+    }
+    expect(rid).toBeTruthy();
+    const b = new SimEngine(layout, { seed: 21, initialState: snapshotOf(a) });
+    b.step();
+    const r1 = b.state.robots[rid!];
+    expect(r1.fsm).not.toBe("PICKING");            // 舊 bug：rt.target 歸零 → 立刻視為抵達
+    expect(r1.path.length).toBeGreaterThan(0);     // 路徑還在走，不是被清掉
+  }, 60000);
+
+  it("任務 / 事件序號延續，不會產生重複 ID", () => {
+    const a = new SimEngine(layout, { seed: 22 });
+    for (let i = 0; i < 3000; i++) a.step();
+    const snap = snapshotOf(a);
+    const b = new SimEngine(layout, { seed: 22, initialState: snap });
+    const existing = new Set(Object.keys(snap.tasks as Record<string, unknown>));
+    const t = b.createTask({ type: "PICK", priority: "NORMAL", source: "SHELF-A01", destination: "PACK-01" });
+    expect(existing.has(t.id)).toBe(false);
+    const maxE = Math.max(...(snap.recent_events as Array<{ id: string }>).map((e) => parseInt(e.id.slice(1), 10)));
+    expect(parseInt(b.state.recent_events[0].id.slice(1), 10)).toBeGreaterThan(maxE);
+  }, 60000);
+
+  it("搭電梯中被接手：行程不中斷、樓層仍只在 ALIGHTING 完成後翻、任務照樣完成", () => {
+    const a = new SimEngine(layout, { seed: 23 });
+    const t = a.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
+    let riding = false;
+    for (let i = 0; i < 30000 && !riding; i++) { a.step(); riding = Object.values(a.state.robots).some((r) => r.lift_stage === "RIDING"); }
+    expect(riding).toBe(true);
+    const b = new SimEngine(layout, { seed: 23, initialState: snapshotOf(a) });
+    const t2 = b.state.tasks[t.id];
+    const prevFloor: Record<string, number> = {}; const prevStage: Record<string, string | null> = {};
+    for (const [id, r] of Object.entries(b.state.robots)) { prevFloor[id] = r.floor; prevStage[id] = r.lift_stage; }
+    for (let i = 0; i < 60000 && t2.status !== "COMPLETED"; i++) {
+      b.step();
+      for (const [id, r] of Object.entries(b.state.robots)) {
+        if (r.floor !== prevFloor[id]) expect(prevStage[id], `${id} changed floor outside lift flow after handover`).toBe("ALIGHTING");
+        prevFloor[id] = r.floor; prevStage[id] = r.lift_stage;
+      }
+    }
+    expect(t2.status).toBe("COMPLETED");
+  }, 120000);
+});
+
+describe("dispatch audit ↔ actual lift (round-6 P2)", () => {
+  it("派工稽核記錄的電梯 = 機器人實際排入的電梯", () => {
+    const e = new SimEngine(layout, { seed: 24 });
+    let audited: string | null = null; let rid = "";
+    for (let i = 0; i < 60000 && !audited; i++) {
+      e.step();
+      const d = e.state.recent_decisions[0];
+      if (!d || d.tick !== e.state.sim.tick) continue;
+      const c = d.candidates.find((x) => x.robot_id === d.selected_robot);
+      const m = c?.reasons.map((s) => /cross-floor via (LIFT-\d+)/.exec(s)).find((x) => x);
+      if (m) { audited = m[1]; rid = d.selected_robot; }
+    }
+    expect(audited).toBeTruthy();
+    let actual: string | null = null;
+    for (let j = 0; j < 5000 && !actual; j++) {
+      e.step();
+      for (const [lid, L] of Object.entries(e.state.lifts)) if (L.queue["1"].includes(rid) || L.queue["2"].includes(rid) || L.reserved_by === rid || L.occupant === rid) actual = lid;
+    }
+    expect(actual).toBe(audited);
+  }, 120000);
+});

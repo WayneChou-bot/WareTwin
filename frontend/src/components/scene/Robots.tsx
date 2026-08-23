@@ -23,7 +23,8 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       // 高度：搭電梯時直接跟隨後端權威的平台高度（規格書 §11.2），否則吸附樓層
       const st = useStore.getState();
       const lift = r.lift_id ? st.twin.lifts[r.lift_id] : null;
-      const explode = st.activeFloor === "exploded" && r.floor === 2 && !r.lift_id ? 5 : 0;
+      const explode = !lite && st.activeFloor === "exploded" && r.floor === 2 && !r.lift_id ? 5 : 0;   // lite（CCTV）場景平台不上移，機器人也不能移
+
       const ty = (lift ? lift.y : FLOOR_ELEV[r.floor] ?? 0) + explode;
       const ky = lift ? 1 - Math.pow(0.002, dt) : smooth ? 1 - Math.pow(0.25, dt) : 1;
       g.position.y += (ty - g.position.y) * ky;

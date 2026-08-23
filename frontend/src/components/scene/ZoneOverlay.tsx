@@ -13,7 +13,7 @@ export function ZoneOverlay({ labels = true }: { labels?: boolean }) {
       {layout.zones.filter((z) => activeFloor === "all" || (z.floor ?? 1) === activeFloor).map((z) => {
         const st = zones[z.id]?.status ?? "NORMAL";
         const color = st === "BLOCKED" ? "#ef4444" : st === "CONGESTED" ? "#f97316" : z.color;
-        const ey = (FLOOR_ELEV[z.floor ?? 1] ?? 0) + (af === "exploded" && (z.floor ?? 1) === 2 ? 5 : 0);
+        const ey = (FLOOR_ELEV[z.floor ?? 1] ?? 0) + (labels && af === "exploded" && (z.floor ?? 1) === 2 ? 5 : 0);   // lite（CCTV，labels=false）場景平台不上移，Zone 框也不能移
         const pts = [...z.polygon, z.polygon[0]].map(([x, zz]) => [x, ey + 0.03, zz] as [number, number, number]);
         const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]);
         const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;

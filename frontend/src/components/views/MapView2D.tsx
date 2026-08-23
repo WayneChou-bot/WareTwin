@@ -59,8 +59,9 @@ export function MapView2D({ mode }: { mode: "MAP" | "TRAFFIC" | "HEATMAP" }) {
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let s = 0, n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue; s += v[rr * cols + cc]; n++; } out[r * cols + c] = s / n; }
     let max = 0; for (let i = 0; i < out.length; i++) if (out[i] > max) max = out[i];
     return { cs, cols, rows, v: out, max: Math.max(max, 1) };
+  // mapFloor / allRobots 必須在 deps 裡：暫停時切樓層才會重算，不會殘留上一層的資料（round-6 P2）
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, tick, W, D, source, remoteHeat]);
+  }, [mode, tick, W, D, source, remoteHeat, mapFloor, allRobots]);
 
   const heatColor = (t: number) => {
     const stops = [[0, 37, 99, 235], [0.35, 34, 197, 94], [0.6, 234, 179, 8], [0.8, 249, 115, 22], [1, 239, 68, 68]];
