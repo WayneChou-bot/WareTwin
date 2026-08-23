@@ -336,3 +336,4 @@ table.dt.full td { white-space: normal; }
 .lift-lbl { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 9px; border-radius: 6px; border: 1px solid #7c8aa0; background: rgba(11,17,28,.92); color: #dbe3f0; font-size: 10.5px; font-family: var(--mono); white-space: nowrap; cursor: pointer; }
 .lift-lbl b { font-size: 11.5px; letter-spacing: .02em; }
 .lift-lbl span { color: #8b98ad; font-size: 9.5px; }
+.lift-lbl .lift-sign { color: #eab308; font-size: 8px; letter-spacing: .04em; }

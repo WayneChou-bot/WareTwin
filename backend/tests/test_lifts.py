@@ -98,3 +98,31 @@ def test_cancelled_robot_releases_lift():
     for L_ in e.state["lifts"].values():
         assert L_["reserved_by"] != rid and L_["occupant"] != rid
         assert rid not in L_["queue"]["1"] and rid not in L_["queue"]["2"]
+
+
+def test_lift_lobby_congestion_resolves():
+    """出口節點與排隊線分開：雙向大量跨樓任務不會在電梯口互卡（修正 R11/R20 卡死 bug）。"""
+    e = SimEngine(L, seed=5)
+    ts = [
+        e.create_task("PICK", "CRITICAL", "SHELF-M02", "PACK-01"),
+        e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02"),
+        e.create_task("PICK", "CRITICAL", "SHELF-M22", "SORT-01"),
+        e.create_task("REPLENISH", "CRITICAL", "INBOUND-1", "SHELF-M30"),
+        e.create_task("REPLENISH", "CRITICAL", "INBOUND-2", "SHELF-M40"),
+        e.create_task("PICK", "HIGH", "SHELF-M05", "PACK-01"),
+    ]
+    still: dict[str, int] = {}; last: dict[str, tuple] = {}
+    for _ in range(90000):
+        e.step()
+        for r in e.state["robots"].values():
+            if not r["lift_stage"] or r["lift_stage"] == "RIDING":
+                still[r["id"]] = 0; last[r["id"]] = (r["position"][0], r["position"][2]); continue
+            lp = last.get(r["id"], (0, 0))
+            moved = math.hypot(r["position"][0] - lp[0], r["position"][2] - lp[1]) > 0.02
+            still[r["id"]] = 0 if moved else still.get(r["id"], 0) + 1
+            last[r["id"]] = (r["position"][0], r["position"][2])
+            if r["lift_stage"] in ("ALIGHTING", "BOARDING"):
+                assert still[r["id"]] < 600, f"{r['id']} stuck in {r['lift_stage']}"
+        if all(t["status"] in ("COMPLETED", "TRANSFERRED", "FAILED") for t in ts):
+            break
+    assert all(t["status"] == "COMPLETED" for t in ts)

@@ -70,7 +70,8 @@ def _sign(x: float) -> float:
 
 class RobotRt:
     __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point",
-                 "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_stage", "lift_enqueued_tick", "lift_retry_tick")
+                 "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_stage", "lift_enqueued_tick", "lift_retry_tick",
+                 "lift_exit", "lift_blocked_ticks")
 
     def __init__(self) -> None:
         self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
@@ -80,6 +81,7 @@ class RobotRt:
         self.front_id: Optional[str] = None; self.front_dist = math.inf; self.last_perc_event = -10**9
         self.pending: Optional[dict[str, Any]] = None; self.lift_id: Optional[str] = None
         self.lift_stage: Optional[str] = None; self.lift_enqueued_tick = 0; self.lift_retry_tick = 0
+        self.lift_exit: Optional[tuple[float, float]] = None; self.lift_blocked_ticks = 0
 
 
 class SimEngine:
@@ -387,6 +389,36 @@ class SimEngine:
     def _lift_cabin(l: dict[str, Any]) -> tuple[float, float]:
         return (l["cell"][0] + 0.5, l["cell"][1] + 0.5)
 
+    def _pick_lift_exit(self, l: dict[str, Any], floor: int, skip: int = 0) -> tuple[float, float]:
+        """出口節點（規格書 §6.4）：與排隊線分開，且「轎廂到出口的直線」避開所有站著的機器人；
+        一次選定（sticky），被擋太久才換 —— 與 TS 相同。"""
+        grid = self.grids[floor]
+        cabin = self._lift_cabin(l)
+
+        def clear(to: tuple[float, float]) -> bool:
+            ax, az = cabin; bx, bz = to
+            dx = bx - ax; dz = bz - az; len2 = dx * dx + dz * dz or 1.0
+            for o in self.state["robots"].values():
+                if o["floor"] != floor or o["lift_id"] or o["velocity"] > 0.1:
+                    continue
+                t = max(0.0, min(1.0, ((o["position"][0] - ax) * dx + (o["position"][2] - az) * dz) / len2))
+                d = math.hypot(o["position"][0] - (ax + dx * t), o["position"][2] - (az + dz * t))
+                if d < SIM["MIN_SEP"]:
+                    return False
+            return True
+
+        ok = []
+        for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-1, -2), (-1, 2), (-2, 0)):
+            c = l["cell"][0] + dc; r_ = l["cell"][1] + dr
+            if not is_walkable(grid, c, r_):
+                continue
+            pnt = (c + 0.5, r_ + 0.5)
+            if clear(pnt):
+                ok.append(pnt)
+        if ok:
+            return ok[skip % len(ok)]
+        return (l["cell"][0] - 2 + 0.5, l["cell"][1] - 2 + 0.5)
+
     def _micro_move(self, r: dict[str, Any], to: tuple[float, float], speed: float) -> bool:
         dx = to[0] - r["position"][0]; dz = to[1] - r["position"][2]
         dist = math.hypot(dx, dz)
@@ -422,7 +454,7 @@ class SimEngine:
                     L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = S["sim"]["tick"] + SIM["LIFT_DOOR_TICKS"]
         r = S["robots"].get(robot_id); rt = self.rt.get(robot_id)
         if r is not None and rt is not None:
-            r["lift_id"] = None; self._set_lift_stage(r, rt, None)
+            r["lift_id"] = None; self._set_lift_stage(r, rt, None); rt.lift_exit = None; rt.lift_blocked_ticks = 0
 
     def _step_lifts(self) -> None:
         S = self.state; tick = S["sim"]["tick"]
@@ -555,11 +587,21 @@ class SimEngine:
                 self._set_lift_stage(r, rt, "ALIGHTING")
             return True
         if stage == "ALIGHTING":
-            if self._micro_move(r, self._lift_slot(lay, 0), SIM["LIFT_BOARD_SPEED"]):
+            if rt.lift_exit is None:
+                rt.lift_exit = self._pick_lift_exit(lay, r["floor"]); rt.lift_blocked_ticks = 0
+            arrived = self._micro_move(r, rt.lift_exit, SIM["LIFT_BOARD_SPEED"])
+            if not arrived and r["velocity"] == 0:
+                rt.lift_blocked_ticks += 1
+                if rt.lift_blocked_ticks % 40 == 0:   # 被擋 4 秒換一個出口
+                    rt.lift_exit = self._pick_lift_exit(lay, r["floor"], rt.lift_blocked_ticks // 40)
+            elif r["velocity"] > 0:
+                rt.lift_blocked_ticks = 0
+            if arrived:
                 L["occupant"] = None; r["lift_id"] = None
                 L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
                 self.emit("ROBOT_EXITED", "LIFT", "INFO", f"{r['id']} exited {rt.lift_id} on Floor {r['floor']}", robot_id=r["id"])
                 p = rt.pending; rt.pending = None; self._set_lift_stage(r, rt, None); rt.lift_id = None
+                rt.lift_exit = None; rt.lift_blocked_ticks = 0
                 self._plan_to(r, rt, tuple(p["point"]), p["phase"], p["loc_id"], p["floor"])
             return True
         return False
@@ -829,6 +871,9 @@ class SimEngine:
             blocked_by = rt.front_id
         if blocked_by:
             occ = blocked_by
+            # 前往電梯途中在大廳口被排隊的機器人擋住：直接視為到達，入隊後由排隊邏輯遞補
+            if rt.lift_stage == "TO_LIFT" and len(r["path"]) - r["path_index"] <= 2:
+                rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; rt.wait_ticks = 0; return
             if perc_stop and r["perception"]["state"] != "STOPPED":
                 r["perception"]["state"] = "STOPPED"
                 if self.state["sim"]["tick"] - rt.last_perc_event > SIM["PERC_EVENT_TICKS"] and rt.front_id and rt.front_id in self.state["robots"]:

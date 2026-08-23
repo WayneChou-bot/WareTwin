@@ -91,6 +91,9 @@ interface RobotRt {
   liftStage: null | "TO_LIFT" | "QUEUED" | "BOARDING" | "RIDING" | "ALIGHTING";
   liftEnqueuedTick: number;
   liftRetryTick: number;
+  /** ALIGHTING 的固定出口點（一次選定；被擋太久才換），避免每 tick 換目標造成震盪 */
+  liftExit: [number, number] | null;
+  liftBlockedTicks: number;
 }
 
 export interface EngineOptions { seed?: number; initialState?: TwinState }
@@ -136,7 +139,7 @@ export class SimEngine {
     this.state = opts.initialState ? JSON.parse(JSON.stringify(opts.initialState)) : this.buildInitialState(seed);
     for (const r of Object.values(this.state.robots)) { if (!r.perception) r.perception = { state: "CLEAR", ahead_m: SIM.LIDAR_RANGE, nearest_m: null, obstacles: [] }; if (r.floor === undefined) r.floor = 1; if (r.lift_id === undefined) r.lift_id = null; if (r.lift_stage === undefined) r.lift_stage = null; }
     if (!this.state.lifts) this.state.lifts = {};
-    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0 };
+    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0, liftExit: null, liftBlockedTicks: 0 };
     this.nextTaskTick = this.state.sim.tick + 10;
   }
 
@@ -330,6 +333,35 @@ export class SimEngine {
   private elevOf(floor: number): number { return this.layout.floors.find((f) => f.id === floor)?.elevation ?? 0; }
   private liftSlot(l: (typeof this.layout.lifts)[number], i: number): [number, number] { return [l.cell[0] - 2 - i + 0.5, l.cell[1] + 0.5]; }
   private liftCabin(l: (typeof this.layout.lifts)[number]): [number, number] { return [l.cell[0] + 0.5, l.cell[1] + 0.5]; }
+  /** 出口節點（規格書 §6.4）：與排隊線分開，且「從轎廂到出口的直線」必須避開所有站著的機器人（排隊/閒置），
+   *  一次選定（sticky），被擋太久才換下一個候選 —— 避免每 tick 換目標造成的原地震盪。 */
+  private pickLiftExit(l: (typeof this.layout.lifts)[number], floor: number, skip = 0): [number, number] {
+    const grid = this.grids[floor];
+    const cabin = this.liftCabin(l);
+    const cand: Array<[number, number]> = [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-1, -2], [-1, 2], [-2, 0]];
+    const clear = (to: [number, number]) => {
+      for (const o of Object.values(this.state.robots)) {
+        if (o.floor !== floor || o.lift_id) continue;
+        if (o.velocity > 0.1) continue;                     // 只避開站著不動的
+        // 點到線段距離
+        const [ax, az] = cabin, [bx, bz] = to;
+        const dx = bx - ax, dz = bz - az; const len2 = dx * dx + dz * dz;
+        const t = Math.max(0, Math.min(1, ((o.position[0] - ax) * dx + (o.position[2] - az) * dz) / (len2 || 1)));
+        const d = Math.hypot(o.position[0] - (ax + dx * t), o.position[2] - (az + dz * t));
+        if (d < SIM.MIN_SEP) return false;
+      }
+      return true;
+    };
+    const ok: Array<[number, number]> = [];
+    for (const [dc, dr] of cand) {
+      const c = l.cell[0] + dc, r = l.cell[1] + dr;
+      if (!isWalkable(grid, c, r)) continue;
+      const p: [number, number] = [c + 0.5, r + 0.5];
+      if (clear(p)) ok.push(p);
+    }
+    if (ok.length) return ok[skip % ok.length];
+    return [l.cell[0] - 2 + 0.5, l.cell[1] - 2 + 0.5];
+  }
 
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
   private microMove(r: RobotState, to: [number, number], speed: number): boolean {
@@ -496,11 +528,16 @@ export class SimEngine {
         return true;
       }
       case "ALIGHTING": {
-        if (this.microMove(r, this.liftSlot(lay, 0), SIM.LIFT_BOARD_SPEED)) {
+        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, r.floor); rt.liftBlockedTicks = 0; }
+        const arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED);
+        if (!arrived && r.velocity === 0) {
+          if (++rt.liftBlockedTicks % 40 === 0) rt.liftExit = this.pickLiftExit(lay, r.floor, rt.liftBlockedTicks / 40);   // 被擋 4 秒換一個出口
+        } else if (r.velocity > 0) rt.liftBlockedTicks = 0;
+        if (arrived) {
           L.occupant = null; r.lift_id = null;
           L.state = "DOOR_CLOSING_AFTER_EXIT"; L.until_tick = tick + SIM.LIFT_DOOR_TICKS;
           this.emit("ROBOT_EXITED", "LIFT", "INFO", `${r.id} exited ${rt.liftId} on Floor ${r.floor}`, { robot_id: r.id });
-          const p = rt.pending!; rt.pending = null; this.setLiftStage(r, rt, null); rt.liftId = null;
+          const p = rt.pending!; rt.pending = null; this.setLiftStage(r, rt, null); rt.liftId = null; rt.liftExit = null; rt.liftBlockedTicks = 0;
           this.planTo(r, rt, p.point, p.phase, p.locId, p.floor);   // REPLANNING_AFTER_LIFT
         }
         return true;
@@ -752,6 +789,10 @@ export class SimEngine {
     if (!blockedBy && percStop) blockedBy = rt.frontId;
     if (blockedBy) {
       occ = blockedBy;
+      // 前往電梯途中在大廳口被排隊的機器人擋住：直接視為到達，入隊後由排隊邏輯遞補到自己的格位
+      if (rt.liftStage === "TO_LIFT" && r.path.length - r.path_index <= 2) {
+        rt.target = null; r.velocity = 0; r.path = []; r.path_index = 0; rt.waitTicks = 0; return;
+      }
       if (percStop && r.perception.state !== "STOPPED") {
         r.perception.state = "STOPPED";
         if (this.state.sim.tick - rt.lastPercEvent > SIM.PERC_EVENT_TICKS && rt.frontId && this.state.robots[rt.frontId]) {

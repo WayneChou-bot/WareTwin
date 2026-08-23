@@ -128,82 +128,150 @@ export function liftLabel(L: LiftState | undefined): string {
   return `${L.state.replace(/_/g, " ")}${L.occupant ? ` · ${L.occupant}` : ""}`;
 }
 
-/** 貨梯（§5）：鋼井架 + 網狀護罩 + 平台（跟隨後端 y）+ 兩層滑動門 + 狀態燈 + 指示標籤 */
+/** 貨梯（補強規格書）：VRC 風格 —— 鋼構 carriage、雙導軌、頂置驅動箱、全高金屬網圍籬、
+ *  每層雙開式連鎖安全門、門框指示燈組、防滑鋼板平台（黃黑邊、docking marker、bumper）、門檻與 leveling 指示。
+ *  透明青色只作為 Digital Twin occupancy overlay，不充當平台本體。 */
 function Lift({ l, elev, lite }: { l: (typeof layout.lifts)[number]; elev: number; lite: boolean }) {
   const platRef = useRef<THREE.Group>(null!);
-  const gateF1 = useRef<THREE.Mesh>(null!);
-  const gateF2 = useRef<THREE.Mesh>(null!);
+  const leafRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null]);   // [f1L, f1R, f2L, f2R]
   const lightRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const levelF1 = useRef<THREE.MeshBasicMaterial>(null!);
+  const levelF2 = useRef<THREE.MeshBasicMaterial>(null!);
+  const occRef = useRef<THREE.Mesh>(null!);
   const selectLift = useStore((s) => s.selectLift);
   const x = l.cell[0] + 0.5, z = l.cell[1] + 0.5;
-  const W = 2.8, D = 3.6, H = elev + 2.6;   // §5.4 轎廂尺寸
-  const graphite = <meshStandardMaterial color="#3a4150" roughness={0.5} metalness={0.65} />;
+  const W = 2.8, D = 3.6, H = elev + 2.4;   // §5.4
+  const LEAF = 1.12;                          // 雙開門單片寬
+  const steel = <meshStandardMaterial color="#2f3542" roughness={0.5} metalness={0.7} />;
+  const frame = <meshStandardMaterial color="#171c26" roughness={0.45} metalness={0.75} />;
 
   useFrame((state, dt) => {
     const L = useStore.getState().twin.lifts[l.id];
     if (!L) return;
     const k = 1 - Math.pow(0.02, dt);
-    if (platRef.current) platRef.current.position.y += (L.y + 0.08 - platRef.current.position.y) * k;
-    // 滑動門：開 = 門片滑向 -z
-    const slide = (gate: THREE.Mesh | null, open: boolean) => { if (gate) gate.position.z += ((open ? -1.4 : 0) - gate.position.z) * k; };
-    slide(gateF1.current, L.door_f1 === "OPEN");
-    slide(gateF2.current, L.door_f2 === "OPEN");
+    if (platRef.current) platRef.current.position.y += (L.y - platRef.current.position.y) * k;
+    // 雙開式安全門：開 = 兩片各滑向 ±z
+    const setLeaf = (idx: number, open: boolean, sign: number) => {
+      const m = leafRefs.current[idx]; if (!m) return;
+      const base = sign * LEAF / 2;
+      m.position.z += ((open ? base + sign * LEAF : base) - m.position.z) * k;
+    };
+    setLeaf(0, L.door_f1 === "OPEN", -1); setLeaf(1, L.door_f1 === "OPEN", +1);
+    setLeaf(2, L.door_f2 === "OPEN", -1); setLeaf(3, L.door_f2 === "OPEN", +1);
     if (lightRef.current) {
       const c = L.fault ? "#ef4444" : LIFT_LIGHT[L.state] ?? "#22c55e";
       lightRef.current.color.set(c);
       lightRef.current.opacity = L.fault ? 0.5 + Math.sin(state.clock.elapsedTime * 8) * 0.5 : 1;
     }
+    // Leveling indicator（補強 §6）：平台與該層對齊時亮綠
+    if (levelF1.current) levelF1.current.color.set(Math.abs(L.y - 0) < 0.05 ? "#22c55e" : "#334155");
+    if (levelF2.current) levelF2.current.color.set(Math.abs(L.y - elev) < 0.05 ? "#22c55e" : "#334155");
+    if (occRef.current) occRef.current.visible = !!L.occupant;
   });
 
   const L = useStore((s) => s.twin.lifts[l.id]);
   return (
     <group position={[x, 0, z]} onClick={(e) => { e.stopPropagation(); selectLift(l.id); }}
       onPointerOver={() => (document.body.style.cursor = "pointer")} onPointerOut={() => (document.body.style.cursor = "")}>
-      {/* 井架四角柱 + 頂部橫樑 */}
+      {/* ── 井道鋼框（黑）＋四角柱 ── */}
       {[[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]].map(([dx, dz], i) => (
-        <mesh key={i} position={[dx, H / 2, dz]} castShadow={!lite}><boxGeometry args={[0.22, H, 0.22]} />{graphite}</mesh>
+        <mesh key={i} position={[dx, H / 2, dz]} castShadow={!lite}><boxGeometry args={[0.24, H, 0.24]} />{frame}</mesh>
       ))}
-      <mesh position={[0, H, 0]}><boxGeometry args={[W + 0.3, 0.3, D + 0.3]} />{graphite}</mesh>
-      {/* 導軌 + 纜線（§5.2 視覺細節） */}
-      {[-W / 2 + 0.15, W / 2 - 0.15].map((dx, i) => (
-        <mesh key={"r" + i} position={[dx, H / 2, 0]}><boxGeometry args={[0.06, H, 0.1]} /><meshStandardMaterial color="#1f2733" metalness={0.8} roughness={0.3} /></mesh>
+      {/* 水平框樑（底/中/樓板高/頂） */}
+      {[0.05, elev / 2, elev, H - 0.3].map((hy, i) => (
+        <group key={"h" + i}>
+          <mesh position={[W / 2, hy, 0]}><boxGeometry args={[0.12, 0.12, D]} />{frame}</mesh>
+          <mesh position={[0, hy, -D / 2]}><boxGeometry args={[W, 0.12, 0.12]} />{frame}</mesh>
+          <mesh position={[0, hy, D / 2]}><boxGeometry args={[W, 0.12, 0.12]} />{frame}</mesh>
+        </group>
       ))}
-      <mesh position={[0, H / 2, D / 2 - 0.1]}><cylinderGeometry args={[0.025, 0.025, H, 6]} /><meshStandardMaterial color="#0f141d" /></mesh>
-      {/* 金屬網護罩（東、北、南三面；西面是出入口） */}
-      {([[W / 2, 0, Math.PI / 2, D], [0, -D / 2, 0, W], [0, D / 2, 0, W]] as const).map(([dx, dz, rot, len], i) => (
+      {/* ── 全高金屬網護罩（東/北/南；西面為門） ── */}
+      {([[W / 2 - 0.02, 0, Math.PI / 2, D - 0.2], [0, -D / 2 + 0.02, 0, W - 0.2], [0, D / 2 - 0.02, 0, W - 0.2]] as const).map(([dx, dz, rot, len], i) => (
         <mesh key={"mesh" + i} position={[dx, H / 2 - 0.15, dz]} rotation-y={rot}>
-          <planeGeometry args={[len, H - 0.3]} />
-          <meshStandardMaterial color="#6c7686" transparent opacity={0.22} side={THREE.DoubleSide} metalness={0.5} roughness={0.4} wireframe />
+          <planeGeometry args={[len, H - 0.5, Math.round(len * 3), Math.round((H - 0.5) * 2)]} />
+          <meshStandardMaterial color="#59a0b8" transparent opacity={0.35} side={THREE.DoubleSide} metalness={0.4} roughness={0.5} wireframe />
         </mesh>
       ))}
-      {/* 平台（跟隨後端 y；機器人由 Robots.tsx 以同一來源同步） */}
-      <group ref={platRef} position={[0, 0.08, 0]}>
-        <mesh castShadow={!lite}><boxGeometry args={[W - 0.35, 0.25, D - 0.35]} /><meshStandardMaterial color="#2d3444" roughness={0.6} metalness={0.5} /></mesh>
-        {/* 平台黃色安全邊 */}
-        {[[-1, 0], [1, 0]].map(([sx], i) => (
-          <mesh key={i} position={[sx * (W - 0.4) / 2, 0.13, 0]}><boxGeometry args={[0.1, 0.03, D - 0.4]} /><meshBasicMaterial color="#eab308" /></mesh>
+      {/* 維修門（東面下方，帶框） */}
+      <group position={[W / 2 - 0.01, 1.0, D / 2 - 0.9]}>
+        <mesh rotation-y={Math.PI / 2}><planeGeometry args={[0.9, 1.9]} /><meshStandardMaterial color="#22303f" transparent opacity={0.85} side={THREE.DoubleSide} /></mesh>
+        <mesh position={[0.02, 0, 0]} rotation-y={Math.PI / 2}><ringGeometry args={[0.05, 0.08, 8]} /><meshBasicMaterial color="#eab308" /></mesh>
+      </group>
+      {/* ── 雙導軌 + 導輪 + 鏈條（VRC 驅動結構） ── */}
+      {[-W / 2 + 0.2, W / 2 - 0.2].map((dx, i) => (
+        <group key={"rail" + i}>
+          <mesh position={[dx, H / 2, D / 2 - 0.22]}><boxGeometry args={[0.1, H, 0.16]} /><meshStandardMaterial color="#454f61" metalness={0.85} roughness={0.25} /></mesh>
+        </group>
+      ))}
+      <mesh position={[0, H / 2, D / 2 - 0.3]}><cylinderGeometry args={[0.03, 0.03, H - 0.6, 6]} /><meshStandardMaterial color="#0d1118" metalness={0.7} roughness={0.4} /></mesh>
+      {/* ── 平台（防滑鋼板 carriage）── */}
+      <group ref={platRef} position={[0, 0, 0]}>
+        {/* 甲板 */}
+        <mesh position={[0, 0.14, 0]} castShadow={!lite}><boxGeometry args={[W - 0.5, 0.1, D - 0.5]} /><meshStandardMaterial color="#3d4657" roughness={0.85} metalness={0.35} /></mesh>
+        {/* 甲板下結構梁 */}
+        <mesh position={[0, 0.05, 0]}><boxGeometry args={[W - 0.7, 0.08, 0.3]} />{steel}</mesh>
+        <mesh position={[0, 0.05, -1.0]}><boxGeometry args={[W - 0.7, 0.08, 0.25]} />{steel}</mesh>
+        <mesh position={[0, 0.05, 1.0]}><boxGeometry args={[W - 0.7, 0.08, 0.25]} />{steel}</mesh>
+        {/* 黃黑安全邊 */}
+        {[-1, 1].map((sx, i) => <mesh key={"ex" + i} position={[sx * (W - 0.55) / 2, 0.2, 0]}><boxGeometry args={[0.12, 0.03, D - 0.5]} /><meshBasicMaterial color="#eab308" /></mesh>)}
+        {[-1, 1].map((sz, i) => <mesh key={"ez" + i} position={[0, 0.2, sz * (D - 0.55) / 2]}><boxGeometry args={[W - 0.5, 0.03, 0.12]} /><meshBasicMaterial color="#eab308" /></mesh>)}
+        {/* Docking marker（青色角括號，佔用時整片 overlay 亮起 = Digital Twin occupancy） */}
+        {[[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]].map(([mx, mz], i) => (
+          <mesh key={"dm" + i} position={[mx, 0.2, mz]} rotation-x={-Math.PI / 2}><planeGeometry args={[0.3, 0.06]} /><meshBasicMaterial color="#22d3ee" transparent opacity={0.8} /></mesh>
+        ))}
+        <mesh ref={occRef} position={[0, 0.21, 0]} rotation-x={-Math.PI / 2} visible={false}>
+          <planeGeometry args={[1.5, 1.5]} /><meshBasicMaterial color="#22d3ee" transparent opacity={0.12} />
+        </mesh>
+        {/* 輪擋 bumper（±x 端） */}
+        {[-1, 1].map((sx, i) => <mesh key={"b" + i} position={[sx * (W - 0.8) / 2, 0.26, 0]}><boxGeometry args={[0.06, 0.1, D - 0.9]} /><meshStandardMaterial color="#b45309" roughness={0.6} /></mesh>)}
+        {/* carriage 托架 → 導軌 */}
+        {[-W / 2 + 0.2, W / 2 - 0.2].map((dx, i) => (
+          <mesh key={"c" + i} position={[dx * 0.82, 0.3, D / 2 - 0.45]}><boxGeometry args={[0.35, 0.5, 0.3]} />{steel}</mesh>
         ))}
       </group>
-      {/* 滑動門（西面出入口）：F1 / F2 各一片 */}
-      <mesh ref={gateF1} position={[-W / 2, 1.15, 0]}>
-        <boxGeometry args={[0.08, 2.1, 2.2]} />
-        <meshStandardMaterial color="#4a5364" transparent opacity={0.75} metalness={0.6} roughness={0.35} />
-      </mesh>
-      <mesh ref={gateF2} position={[-W / 2, elev + 1.15, 0]}>
-        <boxGeometry args={[0.08, 2.1, 2.2]} />
-        <meshStandardMaterial color="#4a5364" transparent opacity={0.75} metalness={0.6} roughness={0.35} />
-      </mesh>
-      {/* 等待區黃黑斜線（§4.3） */}
-      <mesh position={[-W / 2 - 1.2, 0.02, 0]} rotation-x={-Math.PI / 2}><planeGeometry args={[2.2, 3]} /><meshBasicMaterial color="#eab308" transparent opacity={0.12} /></mesh>
-      {/* 狀態燈 + 樓層指示 */}
-      <mesh position={[-W / 2 - 0.05, 2.6, -D / 2 + 0.3]}>
-        <sphereGeometry args={[0.12, 10, 10]} />
-        <meshBasicMaterial ref={lightRef} color="#22c55e" transparent />
-      </mesh>
+      {/* ── 每層雙開式安全門（西面）＋門框、門檻、指示燈組 ── */}
+      {[0, elev].map((fy, fi) => (
+        <group key={"door" + fi} position={[-W / 2, fy, 0]}>
+          {/* 門框 */}
+          <mesh position={[0, 1.15, -LEAF - 0.12]}><boxGeometry args={[0.18, 2.3, 0.14]} />{frame}</mesh>
+          <mesh position={[0, 1.15, LEAF + 0.12]}><boxGeometry args={[0.18, 2.3, 0.14]} />{frame}</mesh>
+          <mesh position={[0, 2.36, 0]}><boxGeometry args={[0.18, 0.16, 2.6]} />{frame}</mesh>
+          {/* 門檻 sill（補強 §6） */}
+          <mesh position={[-0.15, 0.015, 0]}><boxGeometry args={[0.5, 0.03, 2.3]} /><meshStandardMaterial color="#556174" metalness={0.7} roughness={0.35} /></mesh>
+          {/* Door zone 黃黑地面標線 */}
+          <mesh position={[-0.85, fy === 0 ? 0.015 : 0.02, 0]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.1, 2.4]} /><meshBasicMaterial color="#eab308" transparent opacity={0.18} /></mesh>
+          {/* 指示燈柱：樓層燈 / 狀態燈 / interlock / e-stop */}
+          <group position={[0, 0, -LEAF - 0.35]}>
+            <mesh position={[0, 1.2, 0]}><boxGeometry args={[0.12, 0.9, 0.18]} /><meshStandardMaterial color="#1c232f" roughness={0.5} /></mesh>
+            <mesh position={[-0.02, 1.5, 0]}><boxGeometry args={[0.1, 0.12, 0.12]} /><meshBasicMaterial ref={fi === 0 ? levelF1 : levelF2} color="#334155" /></mesh>
+            <mesh position={[-0.02, 1.3, 0]}><boxGeometry args={[0.1, 0.12, 0.12]} /><meshBasicMaterial ref={fi === 0 ? lightRef : undefined} color="#22c55e" transparent /></mesh>
+            <mesh position={[-0.02, 1.05, 0]}><cylinderGeometry args={[0.05, 0.05, 0.05, 10]} /><meshBasicMaterial color="#dc2626" /></mesh>
+          </group>
+          {/* 雙開門片 */}
+          <mesh ref={(m) => { leafRefs.current[fi * 2] = m; }} position={[0, 1.12, -LEAF / 2]}>
+            <boxGeometry args={[0.07, 2.2, LEAF]} />
+            <meshStandardMaterial color="#4a5364" transparent opacity={0.8} metalness={0.6} roughness={0.35} />
+          </mesh>
+          <mesh ref={(m) => { leafRefs.current[fi * 2 + 1] = m; }} position={[0, 1.12, LEAF / 2]}>
+            <boxGeometry args={[0.07, 2.2, LEAF]} />
+            <meshStandardMaterial color="#4a5364" transparent opacity={0.8} metalness={0.6} roughness={0.35} />
+          </mesh>
+        </group>
+      ))}
+      {/* ── 頂置驅動箱（縮小：Motor–Brake–Gearbox）── */}
+      <group position={[0, H + 0.35, D / 2 - 0.5]}>
+        <mesh castShadow={!lite}><boxGeometry args={[1.3, 0.7, 0.9]} /><meshStandardMaterial color="#232a37" roughness={0.5} metalness={0.6} /></mesh>
+        {/* 散熱縫 */}
+        {[-0.3, 0, 0.3].map((dz, i) => <mesh key={i} position={[0.66, 0, dz * 0.9]}><boxGeometry args={[0.02, 0.4, 0.06]} /><meshBasicMaterial color="#0b0f16" /></mesh>)}
+        {/* 驅動狀態 LED + 警示 */}
+        <mesh position={[-0.55, 0.15, 0.46]}><sphereGeometry args={[0.06, 8, 8]} /><meshBasicMaterial color="#22c55e" /></mesh>
+        <mesh position={[0, 0.15, 0.46]} rotation-x={0}><planeGeometry args={[0.3, 0.26]} /><meshBasicMaterial color="#eab308" /></mesh>
+      </group>
       {!lite && (
-        <Html position={[0, H + 0.7, 0]} zIndexRange={[9, 0]} center>
+        <Html position={[0, H + 1.3, 0]} zIndexRange={[9, 0]} center>
           <div className="lift-lbl" onClick={(e) => { e.stopPropagation(); selectLift(l.id); }}>
             <b>{l.id}</b><span>{liftLabel(L)}</span>
+            <span className="lift-sign">AUTOMATED MATERIAL LIFT · AMR ONLY · CAP 1</span>
           </div>
         </Html>
       )}
