@@ -15,7 +15,7 @@
 | 09 | AI Optimization | 先做 04 或 10 → AI Ops → 問「Why is throughput dropping?」「How can we improve throughput?」 | 回答引用 CV03 / Zone / 機器人 id，可點擊跳轉；回覆底下顯示 `gpt-4o-mini`（或 `rule-based`） |
 | 10 | AI Autonomous Decision | Scenarios → **Demo 10 · Compound → Run all three** | 三個 Alert 同時出現；Event Log 追溯鏈：Human detected → Zone B BLOCKED → CV03 STOPPED → R07 re-queued → Rx assigned (AI decision) → rerouted；AI Ops 問「Which conveyor is the bottleneck?」；What-if 跑同一組比較「如果沒處理會怎樣」 |
 | 11 | On-robot Perception | Fleet Overview → **Robot list →** → 挑一台 Perception 為 SLOWING / STOPPED 的機器人（鏡頭自動聚焦）；或 Scenarios → Task Burst 20 讓走道變擠 | 3D 裡選取的機器人有 270° 感測扇形（青 = CLEAR、橘 = SLOWING、紅 = STOPPED），射線指向看到的機器人／人員；Selected Robot 的 Perception 列顯示「STOPPED · ahead 1.6 m · R12 1.6 m」；Event Log「R07 LiDAR: R12 ahead 1.6 m — holding」；其他因感知停車的機器人前方出現紅弧 |
-| 12 | Multi-floor & Lifts | 右上 Floor 選單切到 **Floor 2** 看夾層；Robot list 挑一台 F2 的機器人；等 Event Log 出現「PICK Shelf M?? → Packing」跨樓任務，點該機器人跟拍 | 機器人走到 LIFT-1/2 → Event「boarding LIFT-1 → Floor 1」→ 3D 裡平台載著機器人下降 → 「arrived on Floor 1」→ 繼續送貨；Selected Robot 顯示 🛗 徽章；MAP VIEW 切 Floor 2 看夾層平面 |
+| 12 | Multi-floor & Lifts | Floor 選單切 **Floor 2**／**Exploded** 看夾層；點 3D 裡的 **LIFT-1** 開電梯面板（狀態、佔用、兩層佇列、trips、平均等待）；等跨樓任務出現後點該機器人跟拍；Scenarios → **Lift Fault** 打壞一座電梯 | 機器人排隊（最多 3 格）→ LIFT_RESERVED → 門開 → 低速走進轎廂 → 門關 → 平台載著機器人升降（門開著絕不會動）→ 到達開門 → 走出 → 重新規劃；Event Log 有完整 LIFT_* 事件鏈；故障時等待中的機器人自動改走另一座、已上車的停在轎廂內等復原（不會瞬移） |
 
 ## 講稿重點（30 秒版）
 

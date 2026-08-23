@@ -144,6 +144,7 @@ class EventSource(str, Enum):
     PLANNER = "PLANNER"
     USER = "USER"
     AI_AGENT = "AI_AGENT"
+    LIFT = "LIFT"
 
 
 class EventType(str, Enum):
@@ -170,6 +171,16 @@ class EventType(str, Enum):
     CONVEYOR_STATUS_CHANGED = "CONVEYOR_STATUS_CHANGED"
     CAMERA_STATUS_CHANGED = "CAMERA_STATUS_CHANGED"
     SENSOR_STATUS_CHANGED = "SENSOR_STATUS_CHANGED"
+    # Lift（規格書 §19）
+    LIFT_RESERVED = "LIFT_RESERVED"
+    LIFT_QUEUE_ENTERED = "LIFT_QUEUE_ENTERED"
+    LIFT_ARRIVED = "LIFT_ARRIVED"
+    LIFT_GATE_OPENED = "LIFT_GATE_OPENED"
+    ROBOT_BOARDED = "ROBOT_BOARDED"
+    LIFT_DEPARTED = "LIFT_DEPARTED"
+    ROBOT_EXITED = "ROBOT_EXITED"
+    LIFT_FAULT = "LIFT_FAULT"
+    LIFT_RESERVATION_RELEASED = "LIFT_RESERVATION_RELEASED"
     AI_DECISION = "AI_DECISION"
     VLM_OBSERVATION = "VLM_OBSERVATION"
     SIM_STARTED = "SIM_STARTED"
@@ -217,6 +228,7 @@ class RobotState(_Base):
     model: str = "AMR-L"
     floor: int = 1                       # 所在樓層；position 的 y 恆為 0，渲染時加樓層高度
     lift_id: Optional[str] = None        # 搭乘中的電梯
+    lift_stage: Optional[Literal["TO_LIFT", "QUEUED", "BOARDING", "RIDING", "ALIGHTING"]] = None
     position: Vec3
     heading: float
     velocity: float = Field(ge=0)
@@ -307,6 +319,33 @@ class SensorState(_Base):
     status: DeviceStatus = DeviceStatus.ONLINE
     value: Optional[float] = None
     unit: Optional[str] = None
+
+
+LiftFsmState = Literal[
+    "IDLE", "MOVING_UP", "MOVING_DOWN", "LEVELING",
+    "DOOR_OPENING", "BOARDING", "DOOR_CLOSING",
+    "DOOR_OPENING_AT_DESTINATION", "ALIGHTING", "DOOR_CLOSING_AFTER_EXIT", "COOLDOWN",
+]
+
+
+class LiftState(_Base):
+    """電梯（貨梯）— 後端為唯一權威；前端只做門/平台動畫插值（規格書 §2.1/§9.2）"""
+    id: str
+    state: LiftFsmState = "IDLE"
+    floor: Optional[int] = 1             # 移動中為 null（不屬於任一樓層）
+    target_floor: Optional[int] = None
+    y: float = 0                         # 平台高度 (m)，MOVING 期間由引擎 smoothstep 插值
+    door_f1: Literal["OPEN", "CLOSED"] = "CLOSED"
+    door_f2: Literal["OPEN", "CLOSED"] = "CLOSED"
+    occupant: Optional[RobotId] = None
+    reserved_by: Optional[RobotId] = None
+    queue: dict[str, list[RobotId]] = Field(default_factory=lambda: {"1": [], "2": []})
+    until_tick: int = 0
+    fault: bool = False
+    trips: int = 0
+    busy_ticks: int = 0
+    wait_total_ticks: int = 0
+    wait_n: int = 0
 
 
 class PersonState(_Base):
@@ -414,12 +453,21 @@ class ThroughputPoint(_Base):
     target: int
 
 
+class LiftKpi(_Base):
+    """電梯 KPI（規格書 §21）"""
+    trips: int = 0
+    utilization: float = 0
+    avg_wait_s: float = 0
+    faults: int = 0
+
+
 class KpiSnapshot(_Base):
     tick: int
     fleet: KpiFleet = Field(default_factory=KpiFleet)
     operation: KpiOperation = Field(default_factory=KpiOperation)
     efficiency: KpiEfficiency = Field(default_factory=KpiEfficiency)
     throughput_series: list[ThroughputPoint] = Field(default_factory=list)
+    lifts: "LiftKpi" = Field(default_factory=lambda: LiftKpi())
 
 
 class HeatmapLayer(_Base):
@@ -481,6 +529,11 @@ class TrafficCongestion(_Inj):
     duration_ticks: int = Field(gt=0, le=6000)
 
 
+class LiftFault(_Inj):
+    kind: Literal["LIFT_FAULT"] = "LIFT_FAULT"
+    lift_id: str = Field(max_length=16)
+
+
 class TaskBurst(_Inj):
     kind: Literal["TASK_BURST"] = "TASK_BURST"
     count: int = Field(gt=0, le=30)                  # 公開 Demo：一次最多 30 筆
@@ -489,7 +542,7 @@ class TaskBurst(_Inj):
 
 ScenarioInjection = Annotated[
     Union[RobotFailure, RobotBatterySet, ConveyorFailure, CameraOffline,
-          HumanIntrusion, TrafficCongestion, TaskBurst],
+          HumanIntrusion, TrafficCongestion, TaskBurst, LiftFault],
     Field(discriminator="kind"),
 ]
 
@@ -520,6 +573,7 @@ class TwinState(_Base):
     sim: SimulationState = Field(default_factory=SimulationState)
     robots: dict[RobotId, RobotState] = Field(default_factory=dict)
     tasks: dict[TaskId, TaskState] = Field(default_factory=dict)
+    lifts: dict[str, LiftState] = Field(default_factory=dict)
     zones: dict[ZoneId, ZoneState] = Field(default_factory=dict)
     conveyors: dict[ConveyorId, ConveyorState] = Field(default_factory=dict)
     cameras: dict[CameraId, CameraState] = Field(default_factory=dict)

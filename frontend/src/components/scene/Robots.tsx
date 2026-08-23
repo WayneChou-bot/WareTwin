@@ -20,9 +20,12 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
       const k = smooth ? 1 - Math.pow(0.0005, dt) : 1;
       g.position.x += (r.position[0] - g.position.x) * k;
       g.position.z += (r.position[2] - g.position.z) * k;
-      // 樓層高度：換樓層時用較慢的緩動 → 看得到搭電梯上升/下降
-      const ty = FLOOR_ELEV[r.floor] ?? 0;
-      const ky = smooth ? 1 - Math.pow(0.25, dt) : 1;
+      // 高度：搭電梯時直接跟隨後端權威的平台高度（規格書 §11.2），否則吸附樓層
+      const st = useStore.getState();
+      const lift = r.lift_id ? st.twin.lifts[r.lift_id] : null;
+      const explode = st.activeFloor === "exploded" && r.floor === 2 && !r.lift_id ? 5 : 0;
+      const ty = (lift ? lift.y : FLOOR_ELEV[r.floor] ?? 0) + explode;
+      const ky = lift ? 1 - Math.pow(0.002, dt) : smooth ? 1 - Math.pow(0.25, dt) : 1;
       g.position.y += (ty - g.position.y) * ky;
       let dh = -r.heading - g.rotation.y; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
       g.rotation.y += dh * k;
@@ -143,7 +146,7 @@ function PerceptionGizmo({ r }: { r: RobotState }) {
 function RobotPath({ r, selected }: { r: RobotState; selected: boolean }) {
   const pts = useMemo(() => {
     if (r.path.length === 0 || r.path_index >= r.path.length) return null;
-    const y = (FLOOR_ELEV[r.floor] ?? 0) + 0.06;
+    const y = (FLOOR_ELEV[r.floor] ?? 0) + (useStore.getState().activeFloor === "exploded" && r.floor === 2 ? 5 : 0) + 0.06;
     const out: [number, number, number][] = [[r.position[0], y, r.position[2]]];
     for (let i = r.path_index; i < r.path.length; i++) out.push([r.path[i][0] + 0.5, y, r.path[i][1] + 0.5]);
     return out;
@@ -166,7 +169,7 @@ export function Robots({ lite = false }: { lite?: boolean }) {
   const showLabels = useStore((s) => s.showLabels);
   const showPaths = useStore((s) => s.showPaths);
   const af = useStore((s) => s.activeFloor);
-  const activeFloor = lite ? "all" : af;
+  const activeFloor = lite || af === "exploded" ? "all" : af;
   const visible = (r: RobotState) => activeFloor === "all" || r.floor === activeFloor || !!r.lift_id;
   return (
     <group>

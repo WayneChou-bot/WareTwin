@@ -29,6 +29,7 @@ const PRESETS: Array<{ id: string; label: string; demo: string; build: () => Sce
   { id: "cam", label: "Camera B03 offline", demo: "07", build: () => ({ kind: "CAMERA_OFFLINE", camera_id: "CAM-B03" }) },
   { id: "burst", label: "Peak demand · +20 HIGH tasks", demo: "—", build: () => ({ kind: "TASK_BURST", count: 20, priority: "HIGH" }) },
   { id: "lowbat", label: "R03 battery → 8%", demo: "02", build: () => ({ kind: "ROBOT_BATTERY_SET", robot_id: "R03", battery: 8 }) },
+  { id: "lift1", label: "LIFT-1 fault (cross-floor via LIFT-2 only)", demo: "12", build: () => ({ kind: "LIFT_FAULT", lift_id: "LIFT-1" }) },
 ];
 
 export function WhatIfDrawer() {

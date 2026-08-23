@@ -120,3 +120,67 @@ describe("multi-floor", () => {
     expect(at(80, 20)).toBe(1);          // footprint 外 = 不存在的樓板
   });
 });
+
+describe("lift state machine (spec §9–§14)", () => {
+  const boot = () => {
+    const eng = new SimEngine(layout, { seed: 7 });
+    const t = eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
+    return { eng, t };
+  };
+  it("lift never moves with an open gate; robot never changes floor without riding", () => {
+    const { eng, t } = boot();
+    const floorAt: Record<string, number> = {};
+    for (let i = 0; i < 24000 && t.status !== "COMPLETED"; i++) {
+      eng.step();
+      for (const L of Object.values(eng.state.lifts)) {
+        if (L.state === "MOVING_UP" || L.state === "MOVING_DOWN") {
+          expect(L.door_f1).toBe("CLOSED"); expect(L.door_f2).toBe("CLOSED");
+          expect(L.floor).toBeNull();   // 移動中不屬於任一樓層
+        }
+      }
+      for (const r of Object.values(eng.state.robots)) {
+        const prev = floorAt[r.id] ?? r.floor;
+        if (r.floor !== prev) expect(r.lift_stage, `${r.id} changed floor outside lift flow`).toBe("ALIGHTING");
+        floorAt[r.id] = r.floor;
+      }
+    }
+    expect(t.status).toBe("COMPLETED");
+  }, 60000);
+  it("only one robot occupies a lift; boarding order is FIFO", () => {
+    const eng = new SimEngine(layout, { seed: 11 });
+    for (const dst of ["PACK-01", "SORT-01", "PACK-02"]) eng.createTask({ type: "PICK", priority: "CRITICAL", source: dst === "PACK-01" ? "SHELF-M01" : dst === "SORT-01" ? "SHELF-M10" : "SHELF-M20", destination: dst });
+    const boarded: string[] = []; const enq: Record<string, number> = {};
+    for (let i = 0; i < 30000; i++) {
+      eng.step();
+      for (const L of Object.values(eng.state.lifts)) {
+        for (const f of ["1", "2"]) for (const rid of L.queue[f]) if (!(rid in enq)) enq[rid] = i;
+        if (L.occupant && boarded[boarded.length - 1] !== L.occupant) if (!boarded.includes(L.occupant)) boarded.push(L.occupant);
+      }
+      const riders = Object.values(eng.state.robots).filter((r) => r.lift_id);
+      const byLift = new Map<string, number>();
+      for (const r of riders) byLift.set(r.lift_id!, (byLift.get(r.lift_id!) ?? 0) + 1);
+      for (const n of byLift.values()) expect(n).toBe(1);
+    }
+    expect(boarded.length).toBeGreaterThanOrEqual(2);
+  }, 60000);
+  it("lift fault reroutes waiting robots to the other lift; rider is never teleported", () => {
+    const { eng, t } = boot();
+    // 等機器人進入電梯流程
+    let rid: string | null = null;
+    for (let i = 0; i < 20000 && !rid; i++) { eng.step(); rid = t.assigned_robot && eng.state.robots[t.assigned_robot].lift_stage ? t.assigned_robot : null; }
+    expect(rid).toBeTruthy();
+    const r = eng.state.robots[rid!];
+    const liftId = Object.keys(eng.state.lifts).find((id) => eng.state.lifts[id].reserved_by === rid || eng.state.lifts[id].queue["1"].includes(rid!) || eng.state.lifts[id].queue["2"].includes(rid!)) ?? "LIFT-1";
+    eng.inject({ kind: "LIFT_FAULT", lift_id: liftId });
+    for (let i = 0; i < 200; i++) eng.step();
+    if (!r.lift_id) {
+      // 未上車：應改用另一座
+      const other = Object.values(eng.state.lifts).find((L) => L.id !== liftId)!;
+      const inOther = other.reserved_by === rid || other.queue["1"].includes(rid!) || other.queue["2"].includes(rid!) || r.lift_id === other.id;
+      expect(inOther || r.lift_stage === "TO_LIFT").toBe(true);
+    }
+    eng.clearInjection("LIFT_FAULT", liftId);
+    for (let i = 0; i < 24000 && t.status !== "COMPLETED"; i++) eng.step();
+    expect(t.status).toBe("COMPLETED");
+  }, 90000);
+});

@@ -15,6 +15,7 @@ export function ScenariosDrawer() {
   const [robot, setRobot] = useState("R07");
   const [conveyor, setConveyor] = useState("CV03");
   const [camera, setCamera] = useState("CAM-B03");
+  const [lift, setLift] = useState("LIFT-1");
   const [zone, setZone] = useState("B");
   const [duration, setDuration] = useState(60);
   const [level, setLevel] = useState(0.8);
@@ -32,6 +33,7 @@ export function ScenariosDrawer() {
     ...Object.values(twin.cameras).filter((c) => c.status === "OFFLINE").map((c) => ({ kind: "CAMERA_OFFLINE" as const, target: c.id, label: `${c.id} offline` })),
     ...[...new Set(Object.values(twin.people).map((p) => p.zone).filter(Boolean))].map((z) => ({ kind: "HUMAN_INTRUSION" as const, target: z!, label: `Human in Zone ${z}` })),
     ...Object.values(twin.alerts).filter((a) => a.id.startsWith("traffic-")).map((a) => ({ kind: "TRAFFIC_CONGESTION" as const, target: a.zone_id!, label: `Traffic Zone ${a.zone_id}` })),
+    ...Object.values(twin.lifts ?? {}).filter((l) => l.fault).map((l) => ({ kind: "LIFT_FAULT" as const, target: l.id, label: `${l.id} fault` })),
   ];
 
   return (
@@ -65,6 +67,10 @@ export function ScenariosDrawer() {
         <Row title="Camera Failure" demo="07" desc="Camera goes offline; CCTV subsystem degraded">
           <select value={camera} onChange={(e) => setCamera(e.target.value)}>{layout.cameras.map((c) => <option key={c.id} value={c.id}>{c.id}</option>)}</select>
           <button className="btn" onClick={() => fire({ kind: "CAMERA_OFFLINE", camera_id: camera })}>Offline</button>
+        </Row>
+        <Row title="Lift Fault" demo="12" desc="Freight lift out of service — waiting robots reroute to the other lift; a rider stays aboard until recovery">
+          <select value={lift} onChange={(e) => setLift(e.target.value)}>{layout.lifts.map((l) => <option key={l.id} value={l.id}>{l.id}</option>)}</select>
+          <button className="btn danger" onClick={() => fire({ kind: "LIFT_FAULT", lift_id: lift })}>Fault</button>
         </Row>
         <Row title="Task Burst" demo="—" desc="Release many tasks at once — watch scheduling and congestion">
           <input type="number" min={1} max={30} value={burst} onChange={(e) => setBurst(+e.target.value)} /><span className="unit">tasks</span>

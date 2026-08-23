@@ -83,7 +83,7 @@ export type Severity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type EventSource =
   | "ROBOT" | "SENSOR" | "CAMERA" | "VLM" | "CONVEYOR"
-  | "SIMULATION" | "FLEET_MANAGER" | "PLANNER" | "USER" | "AI_AGENT";
+  | "SIMULATION" | "FLEET_MANAGER" | "PLANNER" | "USER" | "AI_AGENT" | "LIFT";
 
 export type EventType =
   // Robot
@@ -110,6 +110,16 @@ export type EventType =
   | "ZONE_CONGESTION_HIGH"
   | "HUMAN_DETECTED"
   | "HUMAN_CLEARED"
+  // Lift（規格書 §19）
+  | "LIFT_RESERVED"
+  | "LIFT_QUEUE_ENTERED"
+  | "LIFT_ARRIVED"
+  | "LIFT_GATE_OPENED"
+  | "ROBOT_BOARDED"
+  | "LIFT_DEPARTED"
+  | "ROBOT_EXITED"
+  | "LIFT_FAULT"
+  | "LIFT_RESERVATION_RELEASED"
   // Devices
   | "CONVEYOR_STATUS_CHANGED"
   | "CAMERA_STATUS_CHANGED"
@@ -147,6 +157,8 @@ export interface RobotState {
   floor: number;
   /** 搭乘中的電梯 id；null = 不在電梯上 */
   lift_id: string | null;
+  /** 電梯子狀態（規格書 §10）；null = 不在電梯流程中 */
+  lift_stage: "TO_LIFT" | "QUEUED" | "BOARDING" | "RIDING" | "ALIGHTING" | null;
   position: Vec3;
   /** 航向角 (弧度)，繞 y 軸，0 = +x 方向 */
   heading: number;
@@ -245,6 +257,35 @@ export interface SensorState {
 }
 
 /** 人員 / 堆高機等 NPC。第一版只在故障注入時出現。 */
+export type LiftFsmState =
+  | "IDLE" | "MOVING_UP" | "MOVING_DOWN" | "LEVELING"
+  | "DOOR_OPENING" | "BOARDING" | "DOOR_CLOSING"
+  | "DOOR_OPENING_AT_DESTINATION" | "ALIGHTING" | "DOOR_CLOSING_AFTER_EXIT"
+  | "COOLDOWN";
+
+/** 電梯（貨梯）狀態 — 後端為唯一權威；前端只做門/平台動畫插值（規格書 §2.1/§9.2） */
+export interface LiftState {
+  id: string;
+  state: LiftFsmState;
+  /** 目前樓層；移動中為 null（規格書：移動途中不得屬於任一樓層） */
+  floor: number | null;
+  target_floor: number | null;
+  /** 平台高度 (m)，MOVING 期間由引擎以 smoothstep 插值 */
+  y: number;
+  door_f1: "OPEN" | "CLOSED";
+  door_f2: "OPEN" | "CLOSED";
+  occupant: RobotId | null;
+  reserved_by: RobotId | null;
+  /** 各樓層排隊（FIFO），key = "1" | "2" */
+  queue: Record<string, RobotId[]>;
+  until_tick: number;
+  fault: boolean;
+  trips: number;
+  busy_ticks: number;
+  wait_total_ticks: number;
+  wait_n: number;
+}
+
 export interface PersonState {
   id: string;
   kind: "WORKER" | "FORKLIFT";
@@ -366,6 +407,8 @@ export interface KpiSnapshot {
   };
   /** 前端 Throughput 折線圖用；長度固定 (例如 120 點)，後端 ring buffer */
   throughput_series: Array<{ tick: number; completed: number; target: number }>;
+  /** 電梯 KPI（規格書 §21） */
+  lifts: { trips: number; utilization: number; avg_wait_s: number; faults: number };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -404,7 +447,8 @@ export type ScenarioInjection =
   | { kind: "CAMERA_OFFLINE"; camera_id: CameraId; at_tick?: number }
   | { kind: "HUMAN_INTRUSION"; zone_id: ZoneId; duration_ticks: number; at_tick?: number }
   | { kind: "TRAFFIC_CONGESTION"; zone_id: ZoneId; level: number; duration_ticks: number; at_tick?: number }
-  | { kind: "TASK_BURST"; count: number; priority: TaskPriority; at_tick?: number };
+  | { kind: "TASK_BURST"; count: number; priority: TaskPriority; at_tick?: number }
+  | { kind: "LIFT_FAULT"; lift_id: string; at_tick?: number };
 
 export interface WhatIfRequest {
   scenario_name: string;
@@ -435,6 +479,7 @@ export interface TwinState {
   /** 以 id 為 key 的字典：diff / patch 友善，查找 O(1) */
   robots: Record<RobotId, RobotState>;
   tasks: Record<TaskId, TaskState>;
+  lifts: Record<string, LiftState>;
   zones: Record<ZoneId, ZoneState>;
   conveyors: Record<ConveyorId, ConveyorState>;
   cameras: Record<CameraId, CameraState>;

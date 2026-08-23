@@ -38,7 +38,7 @@ It runs on a laptop with an integrated GPU — no RTX, no ROS, no cloud required
 | ⚡ **Scenario injection** | Robot failure, low battery, conveyor stop, human intrusion (zone block + re-route), traffic congestion, camera outage, demand burst — one click each, all reversible. |
 | 🔮 **What-if simulation** | Clone the live twin, inject, run 1–10 min, compare 12 metrics against a baseline with the same random seed. The live system is never touched. |
 | 💬 **AI Operations Copilot** | Ask "Why is throughput dropping?" — the answer is grounded in the live state and cites robots / tasks / events you can click. LLM optional (see [AI modes](#-ai-modes)). |
-| 🏢 **Multi-floor & freight lifts** | A mezzanine second floor with its own racks, zone, cameras and nav grid. Robots ride two freight lifts between floors — cross-floor tasks plan to the lift, wait their turn, ride up/down (animated in 3D) and re-plan on arrival. The Fleet Manager penalises cross-floor assignments so same-floor robots win when available. |
+| 🏢 **Multi-floor & freight lifts** | A steel-framed mezzanine (thick slab, beams, columns, railings) with its own racks, zone, cameras and nav grid. Two freight lifts run a full backend-authoritative state machine — reservation, FIFO queues, sliding gates with safety interlocks (never moves with a gate open), smoothstep platform motion the robot rides on, cooldown, faults with automatic re-routing to the other lift. Robots go Queue → Board → Ride → Alight → Re-plan; floors change only inside that flow. |
 | 📡 **On-robot perception** | Each AMR carries a virtual 270° / 4 m LiDAR: it sees other robots and people (with line-of-sight occlusion by racks), slows down and holds distance instead of relying on grid reservations alone, and reports `CLEAR / SLOWING / STOPPED` plus the obstacles it sees — visualised as a sensor fan in 3D. |
 | 👁️ **VLM perception** | Send a virtual CCTV frame to a vision model → `{event, severity, bbox, confidence}` drawn on the feed. |
 | 🔌 **Real-time sync** | FastAPI + WebSocket: one `FULL` state, then per-tick `PATCH` diffs (~12 KB/s). If the backend is unreachable the browser falls back to a built-in TypeScript engine and keeps running. |
@@ -99,9 +99,9 @@ WareTwin/
 ## 🧪 Tests
 
 ```bash
-cd backend && python -m pytest -q      # 39 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
+cd backend && python -m pytest -q      # 42 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
-cd frontend && npm test                 # 12 tests: same engine contract in TypeScript
+cd frontend && npm test                 # 15 tests: same engine contract in TypeScript
 ```
 
 ## ☁️ Deployment

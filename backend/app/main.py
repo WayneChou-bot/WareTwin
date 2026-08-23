@@ -130,7 +130,7 @@ class TwinServer:
             await self.broadcast({"type": "HEATMAP", "layer": self.heatmap_layer("TRAFFIC", eng.traffic_short)})
 
     # ── diff ────────────────────────────────────────────────
-    SECTIONS = ("tasks", "zones", "conveyors", "cameras", "sensors", "people", "alerts")
+    SECTIONS = ("tasks", "lifts", "zones", "conveyors", "cameras", "sensors", "people", "alerts")
 
     def _snapshot_prev(self) -> None:
         S = self.engine.state

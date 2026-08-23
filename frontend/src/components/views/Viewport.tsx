@@ -24,10 +24,11 @@ export function Viewport() {
     <div className="viewport">
       <div className="view-tabs">{TABS.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
       <div className="vp-toolbar">
-        <select className="sel" title="Floor" value={String(activeFloor)} onChange={(e) => { const v = e.target.value === "all" ? "all" as const : Number(e.target.value); setActiveFloor(v); if (v === 2) focus([31, 8, 51]); else focus([50, 0, 31]); }}>
+        <select className="sel" title="Floor" value={String(activeFloor)} onChange={(e) => { const v = e.target.value === "all" || e.target.value === "exploded" ? e.target.value as "all" | "exploded" : Number(e.target.value); setActiveFloor(v); if (v === 2) focus([31, 8, 51]); else focus([50, 0, 31]); }}>
           <option value="all">All floors</option>
           <option value="1">Floor 1</option>
           <option value="2">Floor 2</option>
+          <option value="exploded">Exploded</option>
         </select>
         <button className="icon-btn" title="Reset camera" onClick={() => focus([50, 0, 31])}>{Icon.expand}</button>
         <button className="icon-btn" title="Viewport settings">{Icon.gear}</button>

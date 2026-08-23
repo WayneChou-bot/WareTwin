@@ -64,7 +64,7 @@ function AuditLog() {
       <div className="modal-b">
         <div className="filters">
           <select value={sev} onChange={(e) => setSev(e.target.value)}><option value="">All severities</option>{["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].map((s) => <option key={s}>{s}</option>)}</select>
-          <select value={src} onChange={(e) => setSrc(e.target.value)}><option value="">All sources</option>{["ROBOT", "FLEET_MANAGER", "PLANNER", "SIMULATION", "CONVEYOR", "CAMERA", "VLM", "USER", "AI_AGENT"].map((s) => <option key={s}>{s}</option>)}</select>
+          <select value={src} onChange={(e) => setSrc(e.target.value)}><option value="">All sources</option>{["ROBOT", "FLEET_MANAGER", "PLANNER", "SIMULATION", "CONVEYOR", "CAMERA", "VLM", "LIFT", "USER", "AI_AGENT"].map((s) => <option key={s}>{s}</option>)}</select>
           <input placeholder="search message / robot / zone…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1 }} />
           <span className="count">{rows.length} / {events.length}</span>
         </div>

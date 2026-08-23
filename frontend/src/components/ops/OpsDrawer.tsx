@@ -31,6 +31,9 @@ export function OpsDrawer() {
           <Tile k="Avg wait" v={`${e.avg_wait_time_s}`} u="s/robot" />
           <Tile k="Congestion" v={`${Math.round(e.congestion_index * 100)}%`} />
           <Tile k="Energy" v={`${e.energy_kwh.toFixed(2)}`} u="kWh" />
+          <Tile k="Lift trips" v={`${kpi.lifts?.trips ?? 0}`} />
+          <Tile k="Lift wait" v={`${kpi.lifts?.avg_wait_s ?? 0}`} u="s avg" />
+          <Tile k="Lift util" v={`${Math.round((kpi.lifts?.utilization ?? 0) * 100)}%`} />
         </div>
         <h4 className="drawer-sub">Operations Copilot</h4>
         <Copilot />

@@ -20,7 +20,7 @@ export type ConnState = "connecting" | "online" | "offline";
 const WS_URL = (import.meta as unknown as { env: Record<string, string | undefined> }).env?.VITE_WS_URL ?? `ws://${location.hostname}:8000/ws`;
 /** REST base（由 WS_URL 推導）：ws://host:8000/ws → http://host:8000 */
 export const API_URL = WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const COLLECTIONS = ["tasks", "zones", "conveyors", "cameras", "sensors", "people", "alerts"] as const;
+const COLLECTIONS = ["tasks", "lifts", "zones", "conveyors", "cameras", "sensors", "people", "alerts"] as const;
 
 let socket: WebSocket | null = null;
 let reconnectTimer = 0;

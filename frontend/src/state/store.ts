@@ -50,8 +50,12 @@ interface Store {
   notice: { text: string; kind: "warn" | "info"; until: number } | null;
   setNotice: (text: string | null, kind?: "warn" | "info") => void;
   /** 3D / Map 顯示的樓層："all" = 疊起來全顯示 */
-  activeFloor: "all" | number;
-  setActiveFloor: (f: "all" | number) => void;
+  /** "exploded" = 二樓視覺上抬高 5 m（僅 render transform，不動模擬座標） */
+  activeFloor: "all" | "exploded" | number;
+  setActiveFloor: (f: "all" | "exploded" | number) => void;
+  /** 點選的電梯（右欄顯示 Lift 面板；與 selectedRobot 互斥） */
+  selectedLift: string | null;
+  selectLift: (id: string | null) => void;
   drawer: null | "scenarios" | "ops" | "whatif";
   setDrawer: (d: null | "scenarios" | "ops" | "whatif") => void;
   /** 最近一次 What-if 結果（後端回傳，含 schema 外的 window 對照資料） */
@@ -63,8 +67,8 @@ interface Store {
 const EMPTY: TwinState = {
   schema_version: "1.0", layout_id: layout.id,
   sim: { tick: 0, tick_ms: 100, speed: 1, mode: "PAUSED", seed: 42, baseline_snapshot_id: null },
-  robots: {}, tasks: {}, zones: {}, conveyors: {}, cameras: {}, sensors: {}, people: {}, alerts: {}, recent_events: [], recent_decisions: [],
-  kpi: { tick: 0, fleet: { total: 0, active: 0, charging: 0, idle: 0, warning: 0, error: 0, offline: 0 }, operation: { throughput_per_min: 0, completed_today: 0, completed_target: 150, pending: 0, ongoing: 0, avg_task_time_s: 0, on_time_rate: 1, avg_utilization: 0 }, efficiency: { avg_travel_distance_m: 0, avg_wait_time_s: 0, congestion_index: 0, energy_kwh: 0 }, throughput_series: [] },
+  robots: {}, tasks: {}, lifts: {}, zones: {}, conveyors: {}, cameras: {}, sensors: {}, people: {}, alerts: {}, recent_events: [], recent_decisions: [],
+  kpi: { tick: 0, fleet: { total: 0, active: 0, charging: 0, idle: 0, warning: 0, error: 0, offline: 0 }, operation: { throughput_per_min: 0, completed_today: 0, completed_target: 150, pending: 0, ongoing: 0, avg_task_time_s: 0, on_time_rate: 1, avg_utilization: 0 }, efficiency: { avg_travel_distance_m: 0, avg_wait_time_s: 0, congestion_index: 0, energy_kwh: 0 }, throughput_series: [], lifts: { trips: 0, utilization: 0, avg_wait_s: 0, faults: 0 } },
   subsystems: { WAREHOUSE: "NORMAL", CONVEYORS: "NORMAL", CHARGING: "NORMAL", CCTV: "NORMAL", NETWORK: "NORMAL" },
 };
 
@@ -79,6 +83,8 @@ export const useStore = create<Store>((set) => ({
   setNotice: (text, kind = "warn") => set({ notice: text ? { text, kind, until: Date.now() + 4000 } : null }),
   activeFloor: "all",
   setActiveFloor: (activeFloor) => set({ activeFloor }),
+  selectedLift: null,
+  selectLift: (selectedLift) => set(selectedLift ? { selectedLift, selectedRobot: null } : { selectedLift }),
   whatif: null,
   setWhatIf: (whatif) => set({ whatif }),
   drawer: null,
@@ -96,7 +102,7 @@ export const useStore = create<Store>((set) => ({
   tool: "select",
   focusTarget: null,
   activeCamera: "CAM-B01",
-  select: (id) => set({ selectedRobot: id }),
+  select: (id) => set(id ? { selectedRobot: id, selectedLift: null } : { selectedRobot: id }),
   setViewTab: (viewTab) => set({ viewTab }),
   setQuality: (quality) => set({ quality }),
   setTool: (tool) => set({ tool }),

@@ -7,13 +7,13 @@ export function ZoneOverlay({ labels = true }: { labels?: boolean }) {
   const zones = useStore((s) => s.twin.zones);
   const focus = useStore((s) => s.focus);
   const af = useStore((s) => s.activeFloor);
-  const activeFloor = labels ? af : "all";   // lite 場景（CCTV）全樓層
+  const activeFloor = !labels || af === "exploded" ? "all" : af;   // lite 場景（CCTV）全樓層
   return (
     <group>
       {layout.zones.filter((z) => activeFloor === "all" || (z.floor ?? 1) === activeFloor).map((z) => {
         const st = zones[z.id]?.status ?? "NORMAL";
         const color = st === "BLOCKED" ? "#ef4444" : st === "CONGESTED" ? "#f97316" : z.color;
-        const ey = FLOOR_ELEV[z.floor ?? 1] ?? 0;
+        const ey = (FLOOR_ELEV[z.floor ?? 1] ?? 0) + (af === "exploded" && (z.floor ?? 1) === 2 ? 5 : 0);
         const pts = [...z.polygon, z.polygon[0]].map(([x, zz]) => [x, ey + 0.03, zz] as [number, number, number]);
         const xs = z.polygon.map((p) => p[0]), zs = z.polygon.map((p) => p[1]);
         const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
@@ -33,7 +33,7 @@ export function ZoneOverlay({ labels = true }: { labels?: boolean }) {
             {labels && (
               <Html position={[lx, ey + 1.2, lz]} zIndexRange={[30, 20]}>
                 <div className="zone-lbl" style={{ color, borderColor: color }} onClick={() => focus([cx, ey, cz])}>
-                  {z.name.toUpperCase()}{st === "CONGESTED" ? " ⚠" : st === "BLOCKED" ? " ⛔" : ""}
+                  {z.id === "M" ? "ZONE M — F2 MEZZANINE" : `${z.name.toUpperCase()} — F1`}{st === "CONGESTED" ? " ⚠" : st === "BLOCKED" ? " ⛔" : ""}
                 </div>
               </Html>
             )}

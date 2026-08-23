@@ -7,7 +7,7 @@ import { getEngine } from "../../simulation/runner";
 export function MapView2D({ mode }: { mode: "MAP" | "TRAFFIC" | "HEATMAP" }) {
   const allRobots = useStore((s) => s.twin.robots);
   const activeFloorSel = useStore((s) => s.activeFloor);
-  const mapFloor = activeFloorSel === "all" ? 1 : activeFloorSel;   // 2D 圖一次畫一層；All 時畫一樓
+  const mapFloor = typeof activeFloorSel === "number" ? activeFloorSel : 1;   // 2D 圖一次畫一層；All/Exploded 時畫一樓
   const robots = Object.fromEntries(Object.entries(allRobots).filter(([, r]) => r.floor === mapFloor));
   const zones = useStore((s) => s.twin.zones);
   const selected = useStore((s) => s.selectedRobot);

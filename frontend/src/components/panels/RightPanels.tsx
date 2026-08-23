@@ -9,7 +9,7 @@ import { SceneContent } from "../scene/Scene3D";
 import type { RobotState } from "../../schema/twin_state";
 
 function RobotThumb({ status }: { status: string }) {
-  const r = useMemo(() => ({ id: "", model: "AMR-L", floor: 1, lift_id: null, position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 }, perception: { state: "CLEAR" as const, ahead_m: 4, nearest_m: null, obstacles: [] } }), [status]);
+  const r = useMemo(() => ({ id: "", model: "AMR-L", floor: 1, lift_id: null, lift_stage: null, position: [0, 0, 0] as [number, number, number], heading: 0.6, velocity: 0, max_speed: 1.5, battery: 100, status: status as never, fsm: "IDLE" as const, health: 100, current_task_id: null, destination: null, path: [], path_index: 0, load: { current: 0, capacity: 4 }, zone: null, eta_s: null, fsm_since_tick: 0, stats: { distance_m: 0, tasks_completed: 0, energy_wh: 0, busy_ticks: 0, wait_ticks: 0 }, perception: { state: "CLEAR" as const, ahead_m: 4, nearest_m: null, obstacles: [] } }), [status]);
   return (
     <Canvas resize={{ offsetSize: true }} dpr={1} camera={{ position: [2.2, 1.6, 2.2], fov: 32 }} gl={{ alpha: true, antialias: true }} style={{ background: "transparent" }}>
       <ambientLight intensity={0.8} /><directionalLight position={[3, 5, 2]} intensity={2} /><pointLight position={[-2, 1, -2]} color="#60a5fa" intensity={4} />
@@ -18,7 +18,39 @@ function RobotThumb({ status }: { status: string }) {
   );
 }
 
+/** 點選電梯後的資訊面板（規格書 §18） */
+function LiftPanel({ id }: { id: string }) {
+  const L = useStore((s) => s.twin.lifts[id]);
+  const selectLift = useStore((s) => s.selectLift);
+  const select = useStore((s) => s.select);
+  const focus = useStore((s) => s.focus);
+  const lay = layout.lifts.find((l) => l.id === id);
+  const tick = useStore((s) => s.twin.sim.tick);
+  if (!L || !lay) return null;
+  const q1 = L.queue["1"] ?? [], q2 = L.queue["2"] ?? [];
+  const moving = L.state === "MOVING_UP" || L.state === "MOVING_DOWN";
+  const eta = moving ? Math.max(0, (L.until_tick - tick) / 10).toFixed(1) : null;
+  const util = tick ? Math.round((L.busy_ticks / tick) * 100) : 0;
+  const avgWait = L.wait_n ? ((L.wait_total_ticks / L.wait_n) / 10).toFixed(1) : "—";
+  const cite = (rid: string) => <button key={rid} className="cite" onClick={() => select(rid)}>{rid}</button>;
+  return (
+    <Panel title={id} sub="Freight lift" action={<button className="link" onClick={() => selectLift(null)}>✕</button>}>
+      <div className="kv"><span className="k">State</span><span className="v" style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: L.fault ? "#ef4444" : undefined }}>{L.fault ? "FAULT" : L.state.replace(/_/g, " ")}{eta ? ` · ETA ${eta}s` : ""}</span></div>
+      <div className="kv"><span className="k">Floor</span><span className="v">{L.floor === null ? `${L.state === "MOVING_UP" ? "F1 → F2" : "F2 → F1"}` : `F${L.floor}`}</span></div>
+      <div className="kv"><span className="k">Occupied by</span><span className="v">{L.occupant ? cite(L.occupant) : "—"}</span></div>
+      <div className="kv"><span className="k">Reserved by</span><span className="v">{L.reserved_by ? cite(L.reserved_by) : "—"}</span></div>
+      <div className="kv"><span className="k">F1 queue</span><span className="v">{q1.length ? q1.map(cite) : "—"}</span></div>
+      <div className="kv"><span className="k">F2 queue</span><span className="v">{q2.length ? q2.map(cite) : "—"}</span></div>
+      <div className="kv"><span className="k">Trips</span><span className="v">{L.trips}</span></div>
+      <div className="kv"><span className="k">Avg wait</span><span className="v">{avgWait}{L.wait_n ? " s" : ""}</span></div>
+      <div className="kv"><span className="k">Utilization</span><span className="v">{util}%</span></div>
+      <button className="btn-outline" onClick={() => focus([lay.cell[0] + 0.5, 4, lay.cell[1] + 0.5])}>Focus camera</button>
+    </Panel>
+  );
+}
+
 export function SelectedRobotPanel() {
+  const liftId = useStore((s) => s.selectedLift);
   const id = useStore((s) => s.selectedRobot);
   const r = useStore((s) => (id ? s.twin.robots[id] : undefined));
   const task = useStore((s) => (r?.current_task_id ? s.twin.tasks[r.current_task_id] : undefined));
@@ -31,7 +63,8 @@ export function SelectedRobotPanel() {
     return loc.replace(/-/g, " ");
   };
   const setModal = useStore((s) => s.setModal);
-  if (!r) return <Panel title="Selected Robot"><div style={{ color: "var(--muted)", padding: "12px 0" }}>Click a robot in the 3D view</div></Panel>;
+  if (liftId && !id) return <LiftPanel id={liftId} />;
+  if (!r) return <Panel title="Selected Robot"><div style={{ color: "var(--muted)", padding: "12px 0" }}>Click a robot or a lift in the 3D view</div></Panel>;
   const col = STATUS_COLOR[r.status];
   const estH = (r.battery / 100) * 3.1;
   const batteryStr = r.battery.toFixed(r.battery < 10 ? 1 : 0);

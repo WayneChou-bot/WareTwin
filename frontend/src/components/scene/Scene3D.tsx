@@ -95,13 +95,13 @@ export function SceneContent({ quality, lite = false }: { quality: "low" | "medi
     <>
       <Background env={!lite} />
       <Lights quality={lite ? "low" : quality} />
-      <group visible={activeFloor === "all" || activeFloor === 1}>
+      <group visible={activeFloor === "all" || activeFloor === "exploded" || activeFloor === 1}>
         <WarehouseShell lite={lite} />
         <RackInstances castShadow={!lite && quality !== "low"} floor={1} />
         <Fixtures lite={lite} />
       </group>
       {f2 && (
-        <group visible={activeFloor === "all" || activeFloor === 2}>
+        <group visible={activeFloor === "all" || activeFloor === "exploded" || activeFloor === 2} position-y={activeFloor === "exploded" ? 5 : 0}>
           <Mezzanine lite={lite} />
           <RackInstances castShadow={false} floor={2} yOffset={f2.elevation} />
         </group>

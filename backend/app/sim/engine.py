@@ -25,7 +25,8 @@ SIM = dict(
     IDLE_TO_PARK_TICKS=300, KPI_EVERY=10, SERIES_EVERY=600, EVENT_RING=500, ZONE_CAPACITY=6,
     # Phase 7：虛擬 LiDAR 與局部避障（與 TS 引擎相同）
     LIDAR_RANGE=4.0, LIDAR_FOV=math.pi * 1.5, PERC_STOP=1.7, PERC_SLOW=2.8, PERC_LOOKAHEAD=3, PERC_EVENT_TICKS=200,
-    LIFT_COOLDOWN_TICKS=20, LIFT_XFLOOR_PENALTY_M=40,
+    LIFT_DOOR_TICKS=12, LIFT_TRAVEL_TICKS=60, LIFT_LEVEL_TICKS=5, LIFT_COOLDOWN_TICKS=20,
+    LIFT_BOARD_SPEED=0.6, LIFT_QUEUE_SPEED=0.9, LIFT_RETRY_TICKS=50, LIFT_XFLOOR_PENALTY_M=40,
 )
 
 MASK = 0xFFFFFFFF
@@ -69,7 +70,7 @@ def _sign(x: float) -> float:
 
 class RobotRt:
     __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point",
-                 "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_until")
+                 "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_stage", "lift_enqueued_tick", "lift_retry_tick")
 
     def __init__(self) -> None:
         self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
@@ -77,7 +78,8 @@ class RobotRt:
         self.goal_loc: Optional[str] = None; self.phase: Optional[str] = None
         self.charger_id: Optional[str] = None; self.idle_ticks = 0; self.last_battery_alert = "NONE"
         self.front_id: Optional[str] = None; self.front_dist = math.inf; self.last_perc_event = -10**9
-        self.pending: Optional[dict[str, Any]] = None; self.lift_id: Optional[str] = None; self.lift_until = 0
+        self.pending: Optional[dict[str, Any]] = None; self.lift_id: Optional[str] = None
+        self.lift_stage: Optional[str] = None; self.lift_enqueued_tick = 0; self.lift_retry_tick = 0
 
 
 class SimEngine:
@@ -88,7 +90,7 @@ class SimEngine:
         for f in layout.get("floors", []):
             if f["id"] != 1:
                 self.grids[f["id"]] = build_nav_grid(layout, f["id"])
-        self.lifts: dict[str, dict[str, Any]] = {l["id"]: {"occupant": None, "busy_until": 0} for l in layout.get("lifts", [])}
+
         n = self.grid.cols * self.grid.rows
         self.traffic = [0.0] * n
         self.traffic_short = [0.0] * n
@@ -106,7 +108,9 @@ class SimEngine:
         self.state: dict[str, Any] = (__import__("copy").deepcopy(initial_state) if initial_state else self._build_initial_state(seed))
         for r in self.state["robots"].values():   # 舊版快照相容
             r.setdefault("perception", {"state": "CLEAR", "ahead_m": SIM["LIDAR_RANGE"], "nearest_m": None, "obstacles": []})
-            r.setdefault("floor", 1); r.setdefault("lift_id", None)
+            r.setdefault("floor", 1); r.setdefault("lift_id", None); r.setdefault("lift_stage", None)
+        if "lifts" not in self.state:
+            self.state["lifts"] = self._initial_lifts()
         for rid in self.state["robots"]:
             self.rt[rid] = RobotRt()
         self.next_task_tick = self.state["sim"]["tick"] + 10
@@ -117,13 +121,21 @@ class SimEngine:
         self._zone_floor = {z["id"]: z.get("floor", 1) for z in layout["zones"]}
 
     # ─────────────────────────────────────────────────────────
+    def _initial_lifts(self) -> dict[str, Any]:
+        return {l["id"]: {
+            "id": l["id"], "state": "IDLE", "floor": 1, "target_floor": None, "y": 0.0,
+            "door_f1": "CLOSED", "door_f2": "CLOSED",
+            "occupant": None, "reserved_by": None, "queue": {"1": [], "2": []},
+            "until_tick": 0, "fault": False, "trips": 0, "busy_ticks": 0, "wait_total_ticks": 0, "wait_n": 0,
+        } for l in self.layout.get("lifts", [])}
+
     def _build_initial_state(self, seed: int) -> dict[str, Any]:
         L = self.layout
         robots: dict[str, Any] = {}
         for sp in L["spawn"]["robots"]:
             robots[sp["id"]] = {
                 "id": sp["id"], "model": "AMR-L", "position": [math.floor(sp["position"][0]) + 0.5, 0, math.floor(sp["position"][2]) + 0.5], "heading": sp["heading"],
-                "floor": sp.get("floor", 1), "lift_id": None,
+                "floor": sp.get("floor", 1), "lift_id": None, "lift_stage": None,
                 "velocity": 0, "max_speed": SIM["MAX_SPEED"], "battery": sp["battery"], "status": "IDLE", "fsm": "IDLE",
                 "health": 95 + math.floor(self.rng() * 5), "current_task_id": None, "destination": None, "path": [], "path_index": 0,
                 "load": {"current": 0, "capacity": 4}, "zone": None, "eta_s": None, "fsm_since_tick": 0,
@@ -134,7 +146,7 @@ class SimEngine:
         return {
             "schema_version": "1.0", "layout_id": L["id"],
             "sim": {"tick": 0, "tick_ms": TH["TICK_MS"], "speed": 1, "mode": "LIVE", "seed": seed, "baseline_snapshot_id": None},
-            "robots": robots, "tasks": {},
+            "robots": robots, "tasks": {}, "lifts": self._initial_lifts(),
             "zones": {z["id"]: {"id": z["id"], "status": "NORMAL", "robot_count": 0, "congestion": 0, "blocked_reason": None, "blocked_since_tick": None} for z in L["zones"]},
             "conveyors": {c["id"]: {"id": c["id"], "status": "RUNNING", "speed_mps": c["speed_mps"], "items_on_belt": 4, "throughput_per_min": 4} for c in L["conveyors"]},
             "cameras": {c["id"]: {"id": c["id"], "zone": c["zone"], "status": "ONLINE", "last_observation": None} for c in L["cameras"]},
@@ -145,6 +157,7 @@ class SimEngine:
                 "operation": {"throughput_per_min": 0, "completed_today": 0, "completed_target": 150, "pending": 0, "ongoing": 0, "avg_task_time_s": 0, "on_time_rate": 1, "avg_utilization": 0},
                 "efficiency": {"avg_travel_distance_m": 0, "avg_wait_time_s": 0, "congestion_index": 0, "energy_kwh": 0},
                 "throughput_series": [{"tick": 0, "completed": 0, "target": 0}],
+            "lifts": {"trips": 0, "utilization": 0, "avg_wait_s": 0, "faults": 0},
             },
             "subsystems": {"WAREHOUSE": "NORMAL", "CONVEYORS": "NORMAL", "CHARGING": "NORMAL", "CCTV": "NORMAL", "NETWORK": "NORMAL"},
         }
@@ -210,6 +223,12 @@ class SimEngine:
         elif kind == "TRAFFIC_CONGESTION":
             self.congested_zones.pop(target_id, None)
             self.emit("ZONE_UNBLOCKED", "USER", "INFO", f"Zone {target_id} traffic restriction lifted", zone_id=target_id)
+        elif kind == "LIFT_FAULT":
+            L = S["lifts"].get(target_id)
+            if L and L["fault"]:
+                L["fault"] = False
+                self._resolve_alert(f"lift-{target_id}")
+                self.emit("LIFT_FAULT", "LIFT", "INFO", f"{target_id} restored — resuming")
 
     def create_task(self, type_: str, priority: str, source: str, destination: str, load_units: int = 1) -> dict[str, Any]:
         err = task_error(self.loc, type_, source, destination)
@@ -237,6 +256,7 @@ class SimEngine:
         self._generate_tasks()
         self._assign_tasks()
         self._rebuild_occupancy()
+        self._step_lifts()
         for rid in list(S["robots"].keys()):
             self._update_perception(S["robots"][rid], self.rt[rid])
         for rid in list(S["robots"].keys()):
@@ -350,46 +370,213 @@ class SimEngine:
         if f == "IDLE": return "IDLE"
         return "ACTIVE"
 
+    # ─────────────────────────────────────────────────────────
+    # 電梯（規格書 §6/§9/§10/§11/§13/§14）— 與 TS 引擎邏輯相同；此引擎（後端）是唯一權威
+    # ─────────────────────────────────────────────────────────
+    def _lift_layout(self, lid: str) -> dict[str, Any]:
+        return next(l for l in self.layout["lifts"] if l["id"] == lid)
+
+    def _elev_of(self, floor: int) -> float:
+        return next((f["elevation"] for f in self.layout.get("floors", []) if f["id"] == floor), 0.0)
+
+    @staticmethod
+    def _lift_slot(l: dict[str, Any], i: int) -> tuple[float, float]:
+        return (l["cell"][0] - 2 - i + 0.5, l["cell"][1] + 0.5)
+
+    @staticmethod
+    def _lift_cabin(l: dict[str, Any]) -> tuple[float, float]:
+        return (l["cell"][0] + 0.5, l["cell"][1] + 0.5)
+
+    def _micro_move(self, r: dict[str, Any], to: tuple[float, float], speed: float) -> bool:
+        dx = to[0] - r["position"][0]; dz = to[1] - r["position"][2]
+        dist = math.hypot(dx, dz)
+        if dist < 0.05:
+            r["velocity"] = 0; return True
+        step = min(dist, speed * SIM["TICK_S"])
+        nx = r["position"][0] + (dx / dist) * step; nz = r["position"][2] + (dz / dist) * step
+        for oid, o in self.state["robots"].items():   # 排隊/進出轎廂也維持 MIN_SEP
+            if oid == r["id"] or o["floor"] != r["floor"] or o["lift_id"]:
+                continue
+            dn = math.hypot(nx - o["position"][0], nz - o["position"][2])
+            if dn < SIM["MIN_SEP"] and dn < math.hypot(r["position"][0] - o["position"][0], r["position"][2] - o["position"][2]):
+                r["velocity"] = 0; return False
+        r["position"][0] = nx; r["position"][2] = nz
+        r["heading"] = math.atan2(dz, dx); r["velocity"] = speed
+        return False
+
+    def _set_lift_stage(self, r: dict[str, Any], rt: RobotRt, stage: Optional[str]) -> None:
+        rt.lift_stage = stage; r["lift_stage"] = stage
+
+    def release_robot_from_lift(self, robot_id: str) -> None:
+        S = self.state
+        for lid, L in S["lifts"].items():
+            for f in ("1", "2"):
+                if robot_id in L["queue"][f]:
+                    L["queue"][f].remove(robot_id)
+            if L["reserved_by"] == robot_id:
+                L["reserved_by"] = None
+                self.emit("LIFT_RESERVATION_RELEASED", "LIFT", "LOW", f"{lid} reservation released ({robot_id})", robot_id=robot_id)
+            if L["occupant"] == robot_id:
+                L["occupant"] = None
+                if L["state"] in ("BOARDING", "ALIGHTING"):
+                    L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = S["sim"]["tick"] + SIM["LIFT_DOOR_TICKS"]
+        r = S["robots"].get(robot_id); rt = self.rt.get(robot_id)
+        if r is not None and rt is not None:
+            r["lift_id"] = None; self._set_lift_stage(r, rt, None)
+
+    def _step_lifts(self) -> None:
+        S = self.state; tick = S["sim"]["tick"]
+        for lid in sorted(S["lifts"].keys()):
+            L = S["lifts"][lid]
+            if L["fault"]:
+                continue
+            if L["state"] not in ("IDLE", "COOLDOWN"):
+                L["busy_ticks"] += 1
+            if L["state"] in ("MOVING_UP", "MOVING_DOWN"):
+                t = min(1.0, max(0.0, 1 - (L["until_tick"] - tick) / SIM["LIFT_TRAVEL_TICKS"]))
+                e = t * t * (3 - 2 * t)
+                y0 = self._elev_of(1 if L["state"] == "MOVING_UP" else 2)
+                y1 = self._elev_of(2 if L["state"] == "MOVING_UP" else 1)
+                L["y"] = y0 + (y1 - y0) * e
+            elif L["floor"] is not None:
+                L["y"] = self._elev_of(L["floor"])
+            if tick < L["until_tick"]:
+                continue
+            st = L["state"]
+            if st == "IDLE":
+                if not L["reserved_by"]:
+                    heads = []
+                    for f in ("1", "2"):
+                        if L["queue"][f]:
+                            rid = L["queue"][f][0]
+                            heads.append((self.rt[rid].lift_enqueued_tick if rid in self.rt else 0, rid))
+                    heads.sort()
+                    if heads:
+                        L["reserved_by"] = heads[0][1]
+                        self.emit("LIFT_RESERVED", "LIFT", "INFO", f"{lid} reserved by {L['reserved_by']}", robot_id=L["reserved_by"])
+                if L["reserved_by"]:
+                    rr = S["robots"].get(L["reserved_by"])
+                    if not rr or rr["status"] == "OFFLINE":
+                        self.release_robot_from_lift(L["reserved_by"])
+                    elif L["floor"] == rr["floor"]:
+                        L["state"] = "DOOR_OPENING"; L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
+                    else:
+                        L["target_floor"] = rr["floor"]
+                        L["state"] = "MOVING_UP" if rr["floor"] == 2 else "MOVING_DOWN"
+                        L["floor"] = None; L["until_tick"] = tick + SIM["LIFT_TRAVEL_TICKS"]
+            elif st in ("MOVING_UP", "MOVING_DOWN"):
+                L["state"] = "LEVELING"; L["until_tick"] = tick + SIM["LIFT_LEVEL_TICKS"]
+            elif st == "LEVELING":
+                L["floor"] = L["target_floor"]; L["target_floor"] = None; L["y"] = self._elev_of(L["floor"])
+                L["state"] = "DOOR_OPENING_AT_DESTINATION" if L["occupant"] else "DOOR_OPENING"
+                L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
+                self.emit("LIFT_ARRIVED", "LIFT", "INFO", f"{lid} arrived at Floor {L['floor']}")
+            elif st == "DOOR_OPENING":
+                if L["floor"] == 1: L["door_f1"] = "OPEN"
+                else: L["door_f2"] = "OPEN"
+                L["state"] = "BOARDING"
+                self.emit("LIFT_GATE_OPENED", "LIFT", "LOW", f"{lid} Floor {L['floor']} gate opened")
+            elif st == "BOARDING":
+                rr = S["robots"].get(L["reserved_by"]) if L["reserved_by"] else None
+                if not rr or rr["status"] == "OFFLINE":
+                    if L["reserved_by"]:
+                        self.release_robot_from_lift(L["reserved_by"])
+                    L["door_f1"] = "CLOSED"; L["door_f2"] = "CLOSED"
+                    L["state"] = "COOLDOWN"; L["until_tick"] = tick + SIM["LIFT_COOLDOWN_TICKS"]
+            elif st == "DOOR_CLOSING":
+                L["door_f1"] = "CLOSED"; L["door_f2"] = "CLOSED"
+                if L["occupant"]:
+                    rr = S["robots"][L["occupant"]]
+                    rt = self.rt.get(L["occupant"])
+                    dest = rt.pending["floor"] if rt and rt.pending else (2 if rr["floor"] == 1 else 1)
+                    L["target_floor"] = dest
+                    L["state"] = "MOVING_UP" if dest == 2 else "MOVING_DOWN"
+                    L["floor"] = None; L["until_tick"] = tick + SIM["LIFT_TRAVEL_TICKS"]
+                    L["trips"] += 1
+                    self.emit("LIFT_DEPARTED", "LIFT", "INFO", f"{lid} departed → Floor {dest} ({L['occupant']})", robot_id=L["occupant"])
+                else:
+                    L["state"] = "COOLDOWN"; L["until_tick"] = tick + SIM["LIFT_COOLDOWN_TICKS"]
+            elif st == "DOOR_OPENING_AT_DESTINATION":
+                if L["floor"] == 1: L["door_f1"] = "OPEN"
+                else: L["door_f2"] = "OPEN"
+                L["state"] = "ALIGHTING"
+                self.emit("LIFT_GATE_OPENED", "LIFT", "LOW", f"{lid} Floor {L['floor']} gate opened")
+            elif st == "DOOR_CLOSING_AFTER_EXIT":
+                L["door_f1"] = "CLOSED"; L["door_f2"] = "CLOSED"
+                L["state"] = "COOLDOWN"; L["until_tick"] = tick + SIM["LIFT_COOLDOWN_TICKS"]
+            elif st == "COOLDOWN":
+                L["state"] = "IDLE"
+
     def _handle_lift(self, r: dict[str, Any], rt: RobotRt) -> bool:
-        """跨樓層搭電梯（與 TS handleLift 邏輯相同）。回傳 True = 這個 tick 已被電梯流程消化。"""
-        tick = self.state["sim"]["tick"]
-        if rt.lift_until > 0:   # 搭乘中
-            r["velocity"] = 0
-            if tick < rt.lift_until:
-                return True
-            lift = next(l for l in self.layout["lifts"] if l["id"] == rt.lift_id)
-            st = self.lifts[lift["id"]]
-            p = rt.pending
-            r["floor"] = p["floor"]; r["lift_id"] = None
-            st["occupant"] = None; st["busy_until"] = tick + SIM["LIFT_COOLDOWN_TICKS"]
-            cell = (lift["cell"][0], lift["cell"][1])
-            grid = self.grids[r["floor"]]
-            if self.occupancy.get((r["floor"], cell[0], cell[1])):
-                found = False
-                for rad in (1, 2):
-                    if found: break
-                    for dr in range(-rad, rad + 1):
-                        if found: break
-                        for dc in range(-rad, rad + 1):
-                            c = (lift["cell"][0] + dc, lift["cell"][1] + dr)
-                            if is_walkable(grid, c[0], c[1]) and not self.occupancy.get((r["floor"], c[0], c[1])):
-                                cell = c; found = True; break
-            cx, cz = cell_center(cell)
-            r["position"][0] = cx; r["position"][2] = cz
-            self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} arrived on Floor {r['floor']} via {lift['id']}", robot_id=r["id"])
-            rt.lift_until = 0; rt.pending = None
-            self._plan_to(r, rt, tuple(p["point"]), p["phase"], p["loc_id"], p["floor"])
+        S = self.state; tick = S["sim"]["tick"]
+        stage = rt.lift_stage
+        if stage is None or stage == "TO_LIFT":
+            if rt.target is not None:
+                return False
+            L = S["lifts"][rt.lift_id]
+            if L["fault"]:
+                return self._re_route_lift(r, rt)
+            f = str(r["floor"])
+            if r["id"] not in L["queue"][f]:
+                L["queue"][f].append(r["id"]); rt.lift_enqueued_tick = tick
+                self.emit("LIFT_QUEUE_ENTERED", "LIFT", "LOW", f"{r['id']} queued at {rt.lift_id} (F{r['floor']}, #{len(L['queue'][f])})", robot_id=r["id"])
+            self._set_lift_stage(r, rt, "QUEUED")
             return True
-        if rt.target is not None:
-            return False   # 還在前往電梯的路上
-        lift = next(l for l in self.layout["lifts"] if l["id"] == rt.lift_id)
-        st = self.lifts[lift["id"]]
-        r["velocity"] = 0
-        if st["occupant"] or st["busy_until"] > tick:
-            r["stats"]["wait_ticks"] += 1; return True
-        st["occupant"] = r["id"]; r["lift_id"] = lift["id"]
-        rt.lift_until = tick + lift["ride_ticks"]
-        self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} boarding {lift['id']} → Floor {rt.pending['floor']}", robot_id=r["id"])
+        L = S["lifts"][rt.lift_id]
+        lay = self._lift_layout(rt.lift_id)
+        if L["fault"] and stage not in ("RIDING", "ALIGHTING"):
+            return self._re_route_lift(r, rt)
+        if stage == "QUEUED":
+            f = str(r["floor"])
+            pos = L["queue"][f].index(r["id"]) if r["id"] in L["queue"][f] else -1
+            if pos < 0:
+                self._set_lift_stage(r, rt, "TO_LIFT"); return True
+            self._micro_move(r, self._lift_slot(lay, min(pos, 2)), SIM["LIFT_QUEUE_SPEED"])
+            if pos == 0 and L["reserved_by"] == r["id"] and L["state"] == "BOARDING" and L["floor"] == r["floor"]:
+                self._set_lift_stage(r, rt, "BOARDING")
+                self.emit("ROBOT_STATE_CHANGED", "LIFT", "INFO", f"{r['id']} boarding {rt.lift_id} → Floor {rt.pending['floor']}", robot_id=r["id"])
+            return True
+        if stage == "BOARDING":
+            if self._micro_move(r, self._lift_cabin(lay), SIM["LIFT_BOARD_SPEED"]):
+                f = str(r["floor"])
+                if r["id"] in L["queue"][f]:
+                    L["queue"][f].remove(r["id"])
+                L["occupant"] = r["id"]; L["reserved_by"] = None; r["lift_id"] = rt.lift_id
+                L["wait_total_ticks"] += tick - rt.lift_enqueued_tick; L["wait_n"] += 1
+                L["state"] = "DOOR_CLOSING"; L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
+                self._set_lift_stage(r, rt, "RIDING")
+                self.emit("ROBOT_BOARDED", "LIFT", "INFO", f"{r['id']} boarded {rt.lift_id}", robot_id=r["id"])
+            return True
+        if stage == "RIDING":
+            r["velocity"] = 0
+            c = self._lift_cabin(lay); r["position"][0] = c[0]; r["position"][2] = c[1]
+            if L["state"] == "ALIGHTING" and L["floor"] == rt.pending["floor"]:
+                r["floor"] = rt.pending["floor"]
+                self._set_lift_stage(r, rt, "ALIGHTING")
+            return True
+        if stage == "ALIGHTING":
+            if self._micro_move(r, self._lift_slot(lay, 0), SIM["LIFT_BOARD_SPEED"]):
+                L["occupant"] = None; r["lift_id"] = None
+                L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
+                self.emit("ROBOT_EXITED", "LIFT", "INFO", f"{r['id']} exited {rt.lift_id} on Floor {r['floor']}", robot_id=r["id"])
+                p = rt.pending; rt.pending = None; self._set_lift_stage(r, rt, None); rt.lift_id = None
+                self._plan_to(r, rt, tuple(p["point"]), p["phase"], p["loc_id"], p["floor"])
+            return True
+        return False
+
+    def _re_route_lift(self, r: dict[str, Any], rt: RobotRt) -> bool:
+        tick = self.state["sim"]["tick"]
+        if tick < rt.lift_retry_tick:
+            r["velocity"] = 0; return True
+        rt.lift_retry_tick = tick + SIM["LIFT_RETRY_TICKS"]
+        p = rt.pending
+        self.release_robot_from_lift(r["id"])
+        rt.pending = p
+        alive = [l for l in self.layout["lifts"] if not self.state["lifts"][l["id"]]["fault"]]
+        if not alive:
+            r["velocity"] = 0; return True
+        self._plan_to(r, rt, tuple(p["point"]), p["phase"], p["loc_id"], p["floor"])
+        self.emit("ROUTE_REPLANNED", "LIFT", "MEDIUM", f"{r['id']} rerouted to {rt.lift_id} (lift fault)", robot_id=r["id"])
         return True
 
     def _step_robot(self, r: dict[str, Any], rt: RobotRt) -> None:
@@ -553,26 +740,41 @@ class SimEngine:
                     best_d = d; best = c
         return best
 
-    def _pick_lift(self, r: dict[str, Any]) -> dict[str, Any]:
-        """選電梯：優先空閒、其次距離近；同分取 id 小的（確定性，與 TS 相同）"""
-        tick = self.state["sim"]["tick"]
+    def lift_cost(self, r: dict[str, Any], l: dict[str, Any]) -> float:
+        """電梯成本（規格書 §7.2）：走到電梯 + 排隊估計 + 就位估計；FAULT = inf（與 TS 相同）"""
+        L = self.state["lifts"][l["id"]]
+        if L["fault"]:
+            return math.inf
+        approach = math.hypot(r["position"][0] - (l["cell"][0] - 1.5), r["position"][2] - (l["cell"][1] + 0.5)) / (SIM["MAX_SPEED"] * 0.8)
+        queue_len = len(L["queue"]["1"]) + len(L["queue"]["2"]) + (1 if L["reserved_by"] else 0)
+        per_service = (SIM["LIFT_DOOR_TICKS"] * 4 + SIM["LIFT_TRAVEL_TICKS"] + SIM["LIFT_LEVEL_TICKS"] + SIM["LIFT_COOLDOWN_TICKS"] + 40) * SIM["TICK_S"]
+        busy = 0 if L["state"] == "IDLE" else per_service * 0.5
+        wrong_floor = SIM["LIFT_TRAVEL_TICKS"] * SIM["TICK_S"] if (L["floor"] is not None and L["floor"] != r["floor"]) else 0
+        return approach + queue_len * per_service + busy + wrong_floor
 
-        def key(l: dict[str, Any]) -> tuple:
-            st = self.lifts[l["id"]]
-            busy = 1 if (st["occupant"] or st["busy_until"] > tick) else 0
-            d = math.hypot(r["position"][0] - l["cell"][0] - 0.5, r["position"][2] - l["cell"][1] - 0.5)
-            return (busy, d, l["id"])
-        return sorted(self.layout["lifts"], key=key)[0]
+    def _pick_lift(self, r: dict[str, Any]) -> Optional[dict[str, Any]]:
+        c = sorted(({"l": l, "cost": self.lift_cost(r, l)} for l in self.layout["lifts"]), key=lambda x: (x["cost"], x["l"]["id"]))
+        return c[0]["l"] if c and c[0]["cost"] < math.inf else None
 
     def _plan_to(self, r: dict[str, Any], rt: RobotRt, point: tuple[float, float], phase: str, loc_id: Optional[str] = None, target_floor: Optional[int] = None) -> None:
         tf = target_floor if target_floor is not None else (self.loc[loc_id].get("floor", 1) if loc_id and loc_id in self.loc else r["floor"])
         if tf != r["floor"]:
-            # 跨樓層：記下最終目標，先走到電梯；抵達後 _handle_lift 接手
+            # 跨樓層（規格書 §7）：Origin → 排隊格（A*）→ 電梯狀態機 → 目的樓層重新規劃
             lift = self._pick_lift(r)
             rt.pending = {"point": point, "phase": phase, "loc_id": loc_id, "floor": tf}
+            if lift is None:   # 全部故障：原地等，定期重試
+                rt.lift_id = self.layout["lifts"][0]["id"] if self.layout["lifts"] else None
+                self._set_lift_stage(r, rt, "TO_LIFT")
+                rt.target = None; r["path"] = []; r["path_index"] = 0
+                rt.lift_retry_tick = self.state["sim"]["tick"] + SIM["LIFT_RETRY_TICKS"]
+                return
             rt.lift_id = lift["id"]
+            self._set_lift_stage(r, rt, "TO_LIFT")
+            L = self.state["lifts"][lift["id"]]
+            slot_idx = min(len(L["queue"][str(r["floor"])]), 2)
+            sp = self._lift_slot(lift, slot_idx)
             start = to_cell(r["position"][0], r["position"][2])
-            goal = (lift["cell"][0], lift["cell"][1])
+            goal = (math.floor(sp[0]), math.floor(sp[1]))
             grid = self.grids[r["floor"]]
             path = astar(grid, start, goal, blocked=self._blocked_cells(r["id"], r["floor"]), cost_map=self._congestion_cost() if r["floor"] == 1 else None)
             if path is None:
@@ -1006,6 +1208,14 @@ class SimEngine:
             "congestion_index": jsround(cong * 100) / 100,
             "energy_kwh": jsround(sum(r["stats"]["energy_wh"] for r in robots)) / 1000,
         }
+        lifts = list(S["lifts"].values())
+        wait_n = sum(l["wait_n"] for l in lifts)
+        K["lifts"] = {
+            "trips": sum(l["trips"] for l in lifts),
+            "utilization": round(sum(l["busy_ticks"] for l in lifts) / (len(lifts) * S["sim"]["tick"]), 3) if S["sim"]["tick"] and lifts else 0,
+            "avg_wait_s": round(sum(l["wait_total_ticks"] for l in lifts) / wait_n * SIM["TICK_S"], 1) if wait_n else 0,
+            "faults": sum(1 for l in lifts if l["fault"]),
+        }
         S["subsystems"]["CHARGING"] = "WARNING" if all(self.charger_busy.values()) else "NORMAL"
         cvs = S["conveyors"].values()
         S["subsystems"]["CONVEYORS"] = "ERROR" if any(c["status"] == "ERROR" for c in cvs) else "WARNING" if any(c["status"] != "RUNNING" for c in cvs) else "NORMAL"
@@ -1059,6 +1269,7 @@ class SimEngine:
                         t["status"] = "TRANSFERRED"; t["completed_tick"] = now
                         nt = self.create_task(t["type"], "HIGH", t["source"], t["destination"]); nt["parent_task_id"] = t["id"]
                     r["current_task_id"] = None; r["path"] = []
+                    self.release_robot_from_lift(r["id"]); self.rt[r["id"]].pending = None
                     self.emit("ROBOT_OFFLINE", "USER", "CRITICAL", f"{r['id']} failure injected — OFFLINE", robot_id=r["id"])
                     self._raise_alert(f"off-{r['id']}", "CRITICAL", f"{r['id']}  Offline", "Robot failure", robot_id=r["id"])
             elif k == "ROBOT_BATTERY_SET":
@@ -1099,6 +1310,15 @@ class SimEngine:
             elif k == "TASK_BURST":
                 for _ in range(inj["count"]):
                     self.next_task_tick = now; self._generate_tasks()
+            elif k == "LIFT_FAULT":
+                L = S["lifts"].get(inj["lift_id"])
+                if L and not L["fault"]:
+                    L["fault"] = True
+                    self.emit("LIFT_FAULT", "LIFT", "CRITICAL" if L["occupant"] else "HIGH",
+                              f"{inj['lift_id']} FAULT" + (f" — {L['occupant']} inside, platform stalled" if L["occupant"] else ""),
+                              robot_id=L["occupant"])
+                    self._raise_alert(f"lift-{inj['lift_id']}", "CRITICAL" if L["occupant"] else "HIGH", f"{inj['lift_id']}  Fault",
+                                      f"Platform stalled with {L['occupant']} aboard" if L["occupant"] else "Out of service")
         self.pending_injections = keep
         for zid in [z for z, cz in self.congested_zones.items() if now >= cz["until"]]:
             del self.congested_zones[zid]; self._resolve_alert(f"traffic-{zid}")
