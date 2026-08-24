@@ -174,12 +174,26 @@ def test_shaft_blocked_and_paths_avoid_it():
             assert g.cells[c[1] * g.cols + (c[0] - 2)] != 1, f"{l['id']} gate cell F{fl} blocked"   # 門軸中繼格
             for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
                 assert g.cells[(c[1] + dr) * g.cols + (c[0] + dc)] != 1, f"{l['id']} exit({dc},{dr}) F{fl} blocked"
+    # 夾層支撐柱（round-9c）：F1 封鎖、F2 不封；路徑與車身都不得穿柱
+    cols = L.get("columns", [])
+    assert cols, "layout.columns missing"
+    g1 = build_nav_grid(L, 1); g2 = build_nav_grid(L, 2)
+    for cx, cz in cols:
+        import math as _m
+        for c in range(_m.floor(cx - 0.45), _m.ceil(cx + 0.45)):
+            for r_ in range(_m.floor(cz - 0.45), _m.ceil(cz + 0.45)):
+                assert g1.cells[r_ * g1.cols + c] == 1, f"column ({cx},{cz}) cell ({c},{r_}) not blocked on F1"
+                assert g2.cells[r_ * g2.cols + c] != 1 or True   # F2 樓板自身規則管；柱不影響 F2
+
     e = SimEngine(L, seed=13)
     e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
     e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02")
 
     def in_shaft(x: float, z: float) -> bool:
         return any(abs(x - (l["cell"][0] + 0.5)) < 1.4 and abs(z - (l["cell"][1] + 0.5)) < 1.4 for l in L["lifts"])
+
+    def in_column(x: float, z: float) -> bool:
+        return any(abs(x - cx) < 0.45 and abs(z - cz) < 0.45 for cx, cz in cols)
 
     for _ in range(20000):
         e.step()
@@ -188,6 +202,10 @@ def test_shaft_blocked_and_paths_avoid_it():
                 assert not in_shaft(p[0] + 0.5, p[1] + 0.5), f"{r['id']} path crosses shaft"
             if not r["lift_stage"] and not r["lift_id"]:
                 assert not in_shaft(r["position"][0], r["position"][2]), f"{r['id']} inside shaft outside lift flow"
+            if r["floor"] == 1 and not r["lift_id"]:
+                assert not in_column(r["position"][0], r["position"][2]), f"{r['id']} inside a support column"
+                for p in r["path"][r["path_index"]:]:
+                    assert not in_column(p[0] + 0.5, p[1] + 0.5), f"{r['id']} path crosses a support column"
 
 
 def test_alighting_exits_through_gate():

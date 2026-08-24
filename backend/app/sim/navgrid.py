@@ -83,5 +83,8 @@ def build_nav_grid(layout: dict[str, Any], floor: int = 1) -> NavGrid:
             fill_rect(*ra["rect"], 1)
     for s in layout["stations"]:
         fill_rect(*s["rect"], 1)
+    # 夾層支撐柱（立在 F1 地面、撐到樓板）：以柱底板 0.9×0.9 m 封成障礙 —— 路徑必須繞柱，不能穿過
+    for cx, cz in layout.get("columns", []):
+        fill_rect(cx - 0.45, cz - 0.45, cx + 0.45, cz + 0.45, 1)
     block_lifts()
     return NavGrid(cols=cols, rows=rows, cells=cells)

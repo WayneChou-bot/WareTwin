@@ -16,8 +16,9 @@ export const FLOOR_ELEV: Record<number, number> = Object.fromEntries((layout.flo
 /** 井道幾何（單一事實來源）：引擎的門區常數（SIM.LIFT_SHAFT_HALF_X / LIFT_DOOR_HALF_W）必須與此一致，測試防止漂移 */
 export const LIFT_SHAFT = { W: 2.8, D: 3.6, LEAF: 1.12 };
 
-/** 支撐柱固定位置（規格書 §4.4：不得穿過走道/貨架/等待區；沿 footprint 內緣與中線） */
-const COLUMNS: Array<[number, number]> = [
+/** 支撐柱固定位置（規格書 §4.4）：單一事實來源在 layout.columns —— F1 導航網格用同一份資料封障礙，
+ *  視覺與路徑永遠一致（round-9c：修正機器人穿柱）。此常數僅為 layout 缺欄位時的後備。 */
+const COLUMNS: Array<[number, number]> = layout.columns ?? [
   [10, 41.5], [22, 41.5], [34, 41.5], [46, 41.5],
   [10, 60.5], [22, 60.5], [34, 60.5], [46, 60.5],
   [10, 51], [46, 51],

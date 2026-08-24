@@ -27,6 +27,8 @@ export interface WarehouseLayout {
   size: { width: number; depth: number; height: number };
   grid: { cell_size: number; cols: number; rows: number };
   floors: LayoutFloor[];
+  /** 夾層支撐柱位（立在 F1 地面）：F1 導航網格以柱底板 0.9×0.9 m 封成障礙 */
+  columns?: Array<[number, number]>;
   lifts: LayoutLift[];
   zones: LayoutZone[];
   docks: LayoutDock[];

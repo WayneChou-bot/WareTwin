@@ -55,6 +55,8 @@ export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number
   }
   for (const ra of layout.restricted_areas) if (!ra.robots_allowed) fillRect(ra.rect[0], ra.rect[1], ra.rect[2], ra.rect[3], 1);
   for (const s of layout.stations) fillRect(s.rect[0], s.rect[1], s.rect[2], s.rect[3], 1);
+  // 夾層支撐柱（立在 F1 地面、撐到樓板）：以柱底板 0.9×0.9 m 封成障礙 —— 路徑必須繞柱，不能穿過
+  for (const [cx, cz] of layout.columns ?? []) fillRect(cx - 0.45, cz - 0.45, cx + 0.45, cz + 0.45, 1);
   blockLifts();
   return { cols, rows, cells };
 }

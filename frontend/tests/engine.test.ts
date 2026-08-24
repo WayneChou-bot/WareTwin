@@ -377,6 +377,16 @@ describe("lift shaft as nav obstacle（round-8）", () => {
   });
 
   it("A* 路徑永不穿越井道；非電梯流程的機器人不會出現在井道範圍", () => {
+    // 夾層支撐柱（round-9c）：F1 封鎖；路徑與車身都不得穿柱
+    const cols = layout.columns ?? [];
+    if (!cols.length) throw new Error("layout.columns missing");
+    const gc1 = buildNavGrid(layout as never, 1);
+    for (const [cx, cz] of cols) {
+      for (let c = Math.floor(cx - 0.45); c < Math.ceil(cx + 0.45); c++)
+        for (let r2 = Math.floor(cz - 0.45); r2 < Math.ceil(cz + 0.45); r2++)
+          expect(gc1.cells[r2 * gc1.cols + c], `column (${cx},${cz}) cell (${c},${r2})`).toBe(1);
+    }
+    const inColumn = (x: number, z: number) => cols.some(([cx, cz]) => Math.abs(x - cx) < 0.45 && Math.abs(z - cz) < 0.45);
     const eng = new SimEngine(layout, { seed: 41 });
     eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
     eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" });
@@ -388,6 +398,10 @@ describe("lift shaft as nav obstacle（round-8）", () => {
           if (inShaft(r.path[pi][0] + 0.5, r.path[pi][1] + 0.5)) throw new Error(`${r.id} path crosses shaft at tick ${eng.state.sim.tick}`);
         }
         if (!r.lift_stage && !r.lift_id && inShaft(r.position[0], r.position[2])) throw new Error(`${r.id} inside shaft outside lift flow at tick ${eng.state.sim.tick}`);
+        if (r.floor === 1 && !r.lift_id) {
+          if (inColumn(r.position[0], r.position[2])) throw new Error(`${r.id} inside a support column at tick ${eng.state.sim.tick}`);
+          for (let pi = r.path_index; pi < r.path.length; pi++) if (inColumn(r.path[pi][0] + 0.5, r.path[pi][1] + 0.5)) throw new Error(`${r.id} path crosses a support column`);
+        }
       }
     }
   }, 180000);
