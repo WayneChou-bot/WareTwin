@@ -91,7 +91,7 @@ WareTwin/
 ├── backend/         FastAPI · Pydantic v2 · asyncio · SQLite
 │   └── app/sim/          Python 引擎 · A* · What-if
 │   └── app/ai/           Copilot · VLM
-├── docs/            schema · layout 產生器 · demo 腳本 · 截圖
+├── docs/            schema · layout 產生器
 └── dev.ps1
 ```
 

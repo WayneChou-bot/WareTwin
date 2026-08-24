@@ -92,7 +92,7 @@ WareTwin/
 ├── backend/         FastAPI · Pydantic v2 · asyncio · SQLite
 │   └── app/sim/          Python engine · A* · What-if
 │   └── app/ai/           Copilot · VLM
-├── docs/            schema · layout generator · demo script · screenshots
+├── docs/            schema · layout generator
 └── dev.ps1
 ```
 
