@@ -432,7 +432,7 @@ class SimEngine:
         cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
         return (cx - (SIM["LIFT_SHAFT_HALF_X"] + math.hypot(SIM["ROBOT_HALF_LEN"], SIM["ROBOT_HALF_W"]) + 0.10), cz)
 
-    def _pick_lift_exit(self, l: dict[str, Any], floor: int, skip: int = 0) -> tuple[float, float]:
+    def _pick_lift_exit(self, l: dict[str, Any], floor: int, toward: Optional[tuple[float, float]] = None, skip: int = 0) -> tuple[float, float]:
         """出口節點（規格書 §6.4）：與排隊線分開；出轎廂走「門軸 → 閘門 → 出口」兩段路（round-8b），
         兩段都必須避開所有站著的機器人；一次選定（sticky），被擋太久才換 —— 與 TS 相同。"""
         grid = self.grids[floor]
@@ -445,7 +445,7 @@ class SimEngine:
                     continue
                 t = max(0.0, min(1.0, ((o["position"][0] - ax) * dx + (o["position"][2] - az) * dz) / len2))
                 d = math.hypot(o["position"][0] - (ax + dx * t), o["position"][2] - (az + dz * t))
-                if d < SIM["MIN_SEP"]:
+                if d < SIM["LIFT_SEP"]:   # 門區用「對接模式」間距（round-8e）；實際移動也是 LIFT_SEP 在擋
                     return False
             return True
 
@@ -454,17 +454,22 @@ class SimEngine:
         def clear(to: tuple[float, float]) -> bool:   # 兩段都要淨空：轎廂→閘門、閘門→出口
             return seg_clear(cabin[0], cabin[1], g[0], g[1]) and seg_clear(g[0], g[1], to[0], to[1])
 
-        ok = []
-        # 候選全在西側（門那一面）：不再有貼著井道角的 (-1, ±2)（round-8b）
+        # round-8e：出口不再固定順序輪流，改成「離下一個目的地最近優先」——目的地在南邊就往南出，不會轉錯邊繞路；
+        # 貼著圍籬的 (-2, ±2) 加 0.75 m 懲罰，路線不再沿著井道邊框平行走
+        ok: list[tuple[float, tuple[float, float]]] = []
         for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
             c = l["cell"][0] + dc; r_ = l["cell"][1] + dr
             if not is_walkable(grid, c, r_):
                 continue
             pnt = (c + 0.5, r_ + 0.5)
-            if clear(pnt):
-                ok.append(pnt)
+            if not clear(pnt):
+                continue
+            hug = 0.75 if (dc == -2 and dr != 0) else 0.0
+            key = (math.hypot(pnt[0] - toward[0], pnt[1] - toward[1]) if toward else 0.0) + hug
+            ok.append((key, pnt))
+        ok.sort(key=lambda x: x[0])
         if ok:
-            return ok[skip % len(ok)]
+            return ok[skip % len(ok)][1]
         return (l["cell"][0] - 2 + 0.5, l["cell"][1] - 2 + 0.5)
 
     def _micro_move(self, r: dict[str, Any], to: tuple[float, float], speed: float, floor_override: Optional[int] = None) -> bool:
@@ -645,7 +650,7 @@ class SimEngine:
         if stage == "ALIGHTING":
             tf = rt.pending["floor"]   # 出口與間距全用目的樓層計算；r["floor"] 到抵達出口那一刻才翻
             if rt.lift_exit is None:
-                rt.lift_exit = self._pick_lift_exit(lay, tf); rt.lift_blocked_ticks = 0; rt.lift_exit_phase = None
+                rt.lift_exit = self._pick_lift_exit(lay, tf, tuple(rt.pending["point"])); rt.lift_blocked_ticks = 0; rt.lift_exit_phase = None
             gate = self._lift_gate_point(lay)
             # 三階段離梯（round-8d）：轎廂內先原地轉向門 → 沿門軸直行、【真正抵達】轉向安全點（門面 − 對角半徑 − 0.10 m）
             # → 原地旋轉朝出口（速度 0、4.0 rad/s 有限角速度、誤差 < 0.06 rad 才走）→ 前往出口。
@@ -677,7 +682,7 @@ class SimEngine:
             if not arrived and r["velocity"] == 0 and rt.lift_exit_phase in ("OUT", "GO"):
                 rt.lift_blocked_ticks += 1
                 if rt.lift_blocked_ticks % 40 == 0:   # 被擋 4 秒換一個出口；換了出口要先轉再走
-                    rt.lift_exit = self._pick_lift_exit(lay, tf, rt.lift_blocked_ticks // 40)
+                    rt.lift_exit = self._pick_lift_exit(lay, tf, tuple(rt.pending["point"]), rt.lift_blocked_ticks // 40)
                     if rt.lift_exit_phase == "GO":
                         rt.lift_exit_phase = "TURN_EXIT"
             elif r["velocity"] > 0:

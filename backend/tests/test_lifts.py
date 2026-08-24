@@ -270,3 +270,15 @@ def test_lift_lobby_congestion_resolves():
         if all(t["status"] in ("COMPLETED", "TRANSFERRED", "FAILED") for t in ts):
             break
     assert all(t["status"] == "COMPLETED" for t in ts)
+
+
+def test_lift_exit_faces_destination():
+    """出口選擇必須朝著離梯後的目的地那一側（round-8e）：目的地在南就往南出，不得選到相反側繞路"""
+    e = SimEngine(L, seed=1)
+    for fl in (1, 2):
+        for l in L["lifts"]:
+            cz = l["cell"][1] + 0.5
+            south = e._pick_lift_exit(l, fl, (l["cell"][0] - 6.0, cz + 9.0))
+            north = e._pick_lift_exit(l, fl, (l["cell"][0] - 6.0, cz - 9.0))
+            assert south[1] >= cz, f"{l['id']} F{fl}: dest S but exit N ({south})"
+            assert north[1] <= cz, f"{l['id']} F{fl}: dest N but exit S ({north})"

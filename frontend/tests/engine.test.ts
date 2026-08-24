@@ -455,3 +455,19 @@ describe("alighting exits through the gate（round-8d 三階段 + OBB）", () =>
     expect(loads.has(false)).toBe(true);
   }, 240000);
 });
+
+describe("lift exit faces the destination（round-8e）", () => {
+  it("目的地在哪側就往哪側出，不得選到相反側繞路（兩座電梯、兩層）", () => {
+    const eng = new SimEngine(layout, { seed: 1 });
+    const pick = (eng as unknown as { pickLiftExit: (l: (typeof layout.lifts)[number], floor: number, toward: [number, number] | null) => [number, number] }).pickLiftExit.bind(eng);
+    for (const fl of [1, 2]) {
+      for (const l of layout.lifts) {
+        const cz = l.cell[1] + 0.5;
+        const south = pick(l, fl, [l.cell[0] - 6, cz + 9]);
+        const north = pick(l, fl, [l.cell[0] - 6, cz - 9]);
+        expect(south[1], `${l.id} F${fl} dest S`).toBeGreaterThanOrEqual(cz);
+        expect(north[1], `${l.id} F${fl} dest N`).toBeLessThanOrEqual(cz);
+      }
+    }
+  });
+});

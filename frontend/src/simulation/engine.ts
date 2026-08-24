@@ -422,7 +422,7 @@ export class SimEngine {
   private liftCabin(l: (typeof this.layout.lifts)[number]): [number, number] { return [l.cell[0] + 0.5, l.cell[1] + 0.5]; }
   /** 出口節點（規格書 §6.4）：與排隊線分開，且「從轎廂到出口的直線」必須避開所有站著的機器人（排隊/閒置），
    *  一次選定（sticky），被擋太久才換下一個候選 —— 避免每 tick 換目標造成的原地震盪。 */
-  private pickLiftExit(l: (typeof this.layout.lifts)[number], floor: number, skip = 0): [number, number] {
+  private pickLiftExit(l: (typeof this.layout.lifts)[number], floor: number, toward: [number, number] | null = null, skip = 0): [number, number] {
     const grid = this.grids[floor];
     const cabin = this.liftCabin(l);
     // 候選全在西側（門那一面）：出轎廂走「門軸 → 閘門 → 出口」兩段路，不斜穿護網/柱子（round-8b）
@@ -434,21 +434,26 @@ export class SimEngine {
         const dx = bx - ax, dz = bz - az; const len2 = dx * dx + dz * dz;
         const t = Math.max(0, Math.min(1, ((o.position[0] - ax) * dx + (o.position[2] - az) * dz) / (len2 || 1)));
         const d = Math.hypot(o.position[0] - (ax + dx * t), o.position[2] - (az + dz * t));
-        if (d < SIM.MIN_SEP) return false;
+        if (d < SIM.LIFT_SEP) return false;                 // 門區用「對接模式」間距（round-8e）；實際移動也是 LIFT_SEP 在擋
       }
       return true;
     };
     const g = this.liftGatePoint(l);
     const clear = (to: [number, number]) =>   // 兩段都要淨空：轎廂→閘門、閘門→出口
       segClear(cabin[0], cabin[1], g[0], g[1]) && segClear(g[0], g[1], to[0], to[1]);
-    const ok: Array<[number, number]> = [];
+    // round-8e：出口不再固定順序輪流，改成「離下一個目的地最近優先」——目的地在南邊就往南出，不會轉錯邊繞路；
+    // 貼著圍籬的 (-2,±2) 加 0.75 m 懲罰，路線不再沿著井道邊框平行走
+    const ok: Array<{ p: [number, number]; key: number }> = [];
     for (const [dc, dr] of cand) {
       const c = l.cell[0] + dc, r = l.cell[1] + dr;
       if (!isWalkable(grid, c, r)) continue;
       const p: [number, number] = [c + 0.5, r + 0.5];
-      if (clear(p)) ok.push(p);
+      if (!clear(p)) continue;
+      const hug = dc === -2 && dr !== 0 ? 0.75 : 0;
+      ok.push({ p, key: (toward ? Math.hypot(p[0] - toward[0], p[1] - toward[1]) : 0) + hug });
     }
-    if (ok.length) return ok[skip % ok.length];
+    ok.sort((a, b) => a.key - b.key);
+    if (ok.length) return ok[skip % ok.length].p;
     return [l.cell[0] - 2 + 0.5, l.cell[1] - 2 + 0.5];
   }
 
@@ -631,7 +636,7 @@ export class SimEngine {
       }
       case "ALIGHTING": {
         const tf = rt.pending!.floor;                      // 出口與間距全用目的樓層計算；r.floor 到抵達出口那一刻才翻
-        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; rt.liftExitPhase = null; }
+        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf, rt.pending!.point); rt.liftBlockedTicks = 0; rt.liftExitPhase = null; }
         const gate = this.liftGatePoint(lay);
         // 三階段離梯（round-8d）：轎廂內先原地轉向門 → 沿門軸直行、【真正抵達】轉向安全點（門面 − 對角半徑 − 0.10 m）
         // → 原地旋轉朝出口（速度 0、4.0 rad/s 有限角速度、誤差 < 0.06 rad 才走）→ 前往出口。
@@ -651,7 +656,7 @@ export class SimEngine {
         else arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED, tf);
         if (!arrived && r.velocity === 0 && (rt.liftExitPhase === "OUT" || rt.liftExitPhase === "GO")) {
           if (++rt.liftBlockedTicks % 40 === 0) {   // 被擋 4 秒換一個出口；換了出口要先轉再走
-            rt.liftExit = this.pickLiftExit(lay, tf, rt.liftBlockedTicks / 40);
+            rt.liftExit = this.pickLiftExit(lay, tf, rt.pending!.point, rt.liftBlockedTicks / 40);
             if (rt.liftExitPhase === "GO") rt.liftExitPhase = "TURN_EXIT";
           }
         } else if (r.velocity > 0) rt.liftBlockedTicks = 0;
