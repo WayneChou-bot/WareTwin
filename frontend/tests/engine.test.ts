@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import layoutJson from "../src/layout/warehouse_layout.json";
 import type { WarehouseLayout } from "../src/layout/types";
-import { SimEngine } from "../src/simulation/engine";
+import { SimEngine, SIM } from "../src/simulation/engine";
+import { LIFT_SHAFT } from "../src/components/scene/Mezzanine";
 import { astar, toCell } from "../src/simulation/astar";
 import { buildNavGrid } from "../src/layout/navgrid";
 
@@ -367,8 +368,9 @@ describe("lift shaft as nav obstacle（round-8）", () => {
       const g = buildNavGrid(layout as never, fl);
       for (const l of layout.lifts) {
         expect(g.cells[l.cell[1] * g.cols + l.cell[0]], `${l.id} cabin F${fl}`).toBe(1);
-        for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 2 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
-        for (const [dc, dr] of [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-1, -2], [-1, 2], [-2, 0]])
+        for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 3 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
+        expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 2)], `${l.id} gate cell F${fl}`).not.toBe(1);   // 門軸中繼格
+        for (const [dc, dr] of [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-3, -2], [-3, 2], [-2, 0]])
           expect(g.cells[(l.cell[1] + dr) * g.cols + (l.cell[0] + dc)], `${l.id} exit(${dc},${dr}) F${fl}`).not.toBe(1);
       }
     }
@@ -391,25 +393,49 @@ describe("lift shaft as nav obstacle（round-8）", () => {
   }, 180000);
 });
 
-describe("alighting exits through the gate（round-8b）", () => {
-  it("出轎廂一律沿門軸先出西側閘門：井道範圍內不越側牆、絕不往東（柱子/護網）走", () => {
-    const eng = new SimEngine(layout, { seed: 17 });
-    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
-    eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" });
-    eng.createTask({ type: "REPLENISH", priority: "CRITICAL", source: "INBOUND-1", destination: "SHELF-M30" });
-    let seen = 0;
-    for (let i = 0; i < 40000; i++) {
+describe("alighting exits through the gate（round-8c 車體包絡）", () => {
+  it("引擎門區幾何常數與 3D 井道模型一致（防止兩處漂移）", () => {
+    expect(SIM.LIFT_SHAFT_HALF_X * 2).toBe(LIFT_SHAFT.W);
+    expect(SIM.LIFT_DOOR_HALF_W).toBe(LIFT_SHAFT.LEAF);
+  });
+
+  it("出轎廂沿門軸直行：旋轉後車體包絡不出門洞、車尾離開門面才轉向；雙向與載貨/空車都驗證", () => {
+    const eng = new SimEngine(layout, { seed: 5 });
+    const tasks = [
+      eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M02", destination: "PACK-01" }),
+      eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" }),
+      eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M22", destination: "SORT-01" }),
+      eng.createTask({ type: "REPLENISH", priority: "CRITICAL", source: "INBOUND-1", destination: "SHELF-M30" }),
+      eng.createTask({ type: "REPLENISH", priority: "CRITICAL", source: "INBOUND-2", destination: "SHELF-M40" }),
+      eng.createTask({ type: "PICK", priority: "HIGH", source: "SHELF-M05", destination: "PACK-01" }),
+    ];
+    const dirs = new Set<string>(); const liftsSeen = new Set<string>(); const loads = new Set<boolean>();
+    for (let i = 0; i < 90000; i++) {
       eng.step();
       for (const r of Object.values(eng.state.robots)) {
         if (r.lift_stage !== "ALIGHTING" || !r.lift_id) continue;
-        seen++;
         const l = layout.lifts.find((x) => x.id === r.lift_id)!;
+        const L = eng.state.lifts[l.id];
         const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
-        const [x, , ] = [r.position[0], 0, 0]; const z = r.position[2];
-        if (x > cx + 0.1) throw new Error(`${r.id} moved east inside shaft (${x.toFixed(2)},${z.toFixed(2)})`);
-        if (x > cx - 1.4 && Math.abs(z - cz) > 1.15) throw new Error(`${r.id} crossing side fence (${x.toFixed(2)},${z.toFixed(2)})`);
+        const x = r.position[0], z = r.position[2];
+        // 旋轉後的車體包絡投影
+        const halfX = Math.abs(Math.cos(r.heading)) * SIM.ROBOT_HALF_LEN + Math.abs(Math.sin(r.heading)) * SIM.ROBOT_HALF_W;
+        const halfZ = Math.abs(Math.sin(r.heading)) * SIM.ROBOT_HALF_LEN + Math.abs(Math.cos(r.heading)) * SIM.ROBOT_HALF_W;
+        const doorPlane = cx - SIM.LIFT_SHAFT_HALF_X;
+        if (x + halfX > doorPlane) {   // 車體仍接觸門平面/井道 → 完整包絡必須在門洞內
+          if (Math.abs(z - cz) + halfZ > SIM.LIFT_DOOR_HALF_W + 1e-6) throw new Error(`${r.id} body outside door opening (${x.toFixed(2)},${z.toFixed(2)}, θ=${r.heading.toFixed(2)})`);
+        }
+        if (Math.abs(z - cz) > 0.05 && x + halfX > doorPlane + 1e-6) throw new Error(`${r.id} turned before tail cleared the door plane (${x.toFixed(2)},${z.toFixed(2)})`);
+        if (x > cx + 0.1) throw new Error(`${r.id} moved east inside shaft`);
+        if (L.floor !== null) dirs.add(`${r.floor}->${L.floor}`);
+        liftsSeen.add(l.id); loads.add(r.load.current > 0);
       }
+      if (tasks.every((t) => t.status === "COMPLETED" || t.status === "TRANSFERRED" || t.status === "FAILED") && dirs.size >= 2) break;
     }
-    expect(seen).toBeGreaterThan(0);
-  }, 180000);
+    expect(dirs.has("1->2")).toBe(true);
+    expect(dirs.has("2->1")).toBe(true);
+    expect(liftsSeen.size).toBeGreaterThan(0);
+    expect(loads.has(true)).toBe(true);
+    expect(loads.has(false)).toBe(true);
+  }, 240000);
 });

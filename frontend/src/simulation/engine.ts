@@ -40,6 +40,11 @@ export const SIM = {
   SERVICE_RADIUS: 1,         // 工作站/貨架 access point 周圍 (Chebyshev) 1 格內的可走格 = 服務格，一台一格
   MIN_SEP: 0.9,              // 任兩台中心距硬下限 (m)：一步會更靠近且低於此值就不走（物理防撞）
   LIFT_SEP: 0.6,             // 電梯口「對接模式」間距 (m)：排隊遞補/進出轎廂的低速微移動用，比走道 MIN_SEP 緊
+  // 電梯門區幾何（round-8c）：與 Mezzanine 的井道模型（LIFT_SHAFT）一致，測試防止兩處漂移
+  LIFT_SHAFT_HALF_X: 1.4,    // 井道半寬 (m)：門面在 cx − 1.4（= 井道 W 2.8 / 2）
+  LIFT_DOOR_HALF_W: 1.12,    // 門洞半寬 (m)（= 雙開門單片 LEAF 寬）
+  ROBOT_HALF_LEN: 0.475,     // AMR 車體半長 (m)：throughGate 門檻與門框淨空由此推導
+  ROBOT_HALF_W: 0.34,        // AMR 車體半寬 (m)（底盤 Z 寬 0.68）
   // Phase 7：虛擬 LiDAR 與局部避障
   LIDAR_RANGE: 4.0,          // m
   LIDAR_FOV: Math.PI * 1.5,  // 270°
@@ -409,7 +414,9 @@ export class SimEngine {
   // ─────────────────────────────────────────────────────────
   private liftLayout(id: string) { return this.layout.lifts.find((l) => l.id === id)!; }
   private elevOf(floor: number): number { return this.layout.floors.find((f) => f.id === floor)?.elevation ?? 0; }
-  private liftSlot(l: (typeof this.layout.lifts)[number], i: number): [number, number] { return [l.cell[0] - 2 - i + 0.5, l.cell[1] + 0.5]; }
+  /** 排隊格（round-8c 退門一格）：slot0 = cell−3，距門面 1.6 m 的緩衝區 —— 出轎廂才能「沿門軸直行 + 車體完全出框」
+   *  又與佔用中的 slot0 保持 ≥ 1.0 m；舊的 cell−2（距門面 0.6 m）在幾何上塞不下這三個條件。 */
+  private liftSlot(l: (typeof this.layout.lifts)[number], i: number): [number, number] { return [l.cell[0] - 3 - i + 0.5, l.cell[1] + 0.5]; }
   private liftCabin(l: (typeof this.layout.lifts)[number]): [number, number] { return [l.cell[0] + 0.5, l.cell[1] + 0.5]; }
   /** 出口節點（規格書 §6.4）：與排隊線分開，且「從轎廂到出口的直線」必須避開所有站著的機器人（排隊/閒置），
    *  一次選定（sticky），被擋太久才換下一個候選 —— 避免每 tick 換目標造成的原地震盪。 */
@@ -429,10 +436,9 @@ export class SimEngine {
       }
       return true;
     };
-    const clear = (to: [number, number]) => {
-      const g = this.liftGatePoint(l, to);   // 兩段都要淨空：轎廂→閘門、閘門→出口
-      return segClear(cabin[0], cabin[1], g[0], g[1]) && segClear(g[0], g[1], to[0], to[1]);
-    };
+    const g = this.liftGatePoint(l);
+    const clear = (to: [number, number]) =>   // 兩段都要淨空：轎廂→閘門、閘門→出口
+      segClear(cabin[0], cabin[1], g[0], g[1]) && segClear(g[0], g[1], to[0], to[1]);
     const ok: Array<[number, number]> = [];
     for (const [dc, dr] of cand) {
       const c = l.cell[0] + dc, r = l.cell[1] + dr;
@@ -444,12 +450,12 @@ export class SimEngine {
     return [l.cell[0] - 2 + 0.5, l.cell[1] - 2 + 0.5];
   }
 
-  /** 閘門通過點（round-8b）：門在井道西面（排隊側）。x 固定在圍籬外 0.3 m，z 依出口方向偏向門洞邊緣
-   *  （±0.95，門洞半寬 ~1.12），使「轎廂→閘門」與「閘門→出口」兩段都與排隊格保持 MIN_SEP 以上。 */
-  private liftGatePoint(l: (typeof this.layout.lifts)[number], exit: [number, number]): [number, number] {
+  /** 閘門通過點（round-8c）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
+   *  x = 門面 − 車體半長 − 0.125 m 緩衝（= cx − 2.0）：到這裡整台車已完全離開門框。
+   *  排隊線退到 cell−3−i 後，門軸直行與佔用中的 slot0 相距 1.0 m ≥ 對接間距。 */
+  private liftGatePoint(l: (typeof this.layout.lifts)[number]): [number, number] {
     const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
-    const dz = Math.max(-0.95, Math.min(0.95, exit[1] - cz));
-    return [cx - 1.7, cz + dz];
+    return [cx - (SIM.LIFT_SHAFT_HALF_X + SIM.ROBOT_HALF_LEN + 0.125), cz];
   }
 
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
@@ -623,8 +629,9 @@ export class SimEngine {
       case "ALIGHTING": {
         const tf = rt.pending!.floor;                      // 出口與間距全用目的樓層計算；r.floor 到抵達出口那一刻才翻
         if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; }
-        // 兩段式出轎廂（round-8b）：先沿門軸穿出西側閘門，過了門檻才轉向出口節點 —— 不會斜穿護網/柱子
-        const gate = this.liftGatePoint(lay, rt.liftExit);
+        // 兩段式出轎廂（round-8c）：沿門軸正中央直行出閘門；門檻 = gate.x + 0.05（= 門面 − 車體半長 − 0.075 m），
+        // 即「車尾完全離開門框」才允許轉向出口節點 —— 不會斜穿門片、也不會轉向時掃到門框
+        const gate = this.liftGatePoint(lay);
         const throughGate = r.position[0] <= gate[0] + 0.05;
         const legArrived = this.microMove(r, throughGate ? rt.liftExit : gate, SIM.LIFT_BOARD_SPEED, tf);
         const arrived = throughGate && legArrived;

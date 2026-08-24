@@ -26,6 +26,8 @@ SIM = dict(
     # Phase 7：虛擬 LiDAR 與局部避障（與 TS 引擎相同）
     LIDAR_RANGE=4.0, LIDAR_FOV=math.pi * 1.5, PERC_STOP=1.7, PERC_SLOW=2.8, PERC_LOOKAHEAD=3, PERC_EVENT_TICKS=200,
     LIFT_SEP=0.6,   # 電梯口「對接模式」間距 (m)：排隊遞補/進出轎廂的低速微移動用，比走道 MIN_SEP 緊
+    # 電梯門區幾何（round-8c）：與前端 Mezzanine 井道模型一致（W 2.8 / 雙開門單片 LEAF 1.12）
+    LIFT_SHAFT_HALF_X=1.4, LIFT_DOOR_HALF_W=1.12, ROBOT_HALF_LEN=0.475, ROBOT_HALF_W=0.34,
     LIFT_DOOR_TICKS=12, LIFT_TRAVEL_TICKS=60, LIFT_LEVEL_TICKS=5, LIFT_COOLDOWN_TICKS=20,
     LIFT_BOARD_SPEED=0.6, LIFT_QUEUE_SPEED=0.9, LIFT_RETRY_TICKS=50, LIFT_XFLOOR_PENALTY_M=40,
 )
@@ -412,18 +414,20 @@ class SimEngine:
 
     @staticmethod
     def _lift_slot(l: dict[str, Any], i: int) -> tuple[float, float]:
-        return (l["cell"][0] - 2 - i + 0.5, l["cell"][1] + 0.5)
+        # 排隊格（round-8c 退門一格）：slot0 = cell−3，距門面 1.6 m 的緩衝區 —— 出轎廂才能
+        # 「沿門軸直行 + 車體完全出框」又與佔用中的 slot0 保持 ≥ 1.0 m；舊的 cell−2 幾何上塞不下這三個條件
+        return (l["cell"][0] - 3 - i + 0.5, l["cell"][1] + 0.5)
 
     @staticmethod
     def _lift_cabin(l: dict[str, Any]) -> tuple[float, float]:
         return (l["cell"][0] + 0.5, l["cell"][1] + 0.5)
 
-    def _lift_gate_point(self, l: dict[str, Any], exit_: tuple[float, float]) -> tuple[float, float]:
-        """閘門通過點（round-8b）：門在井道西面（排隊側）。x 固定在圍籬外 0.3 m，z 依出口方向偏向門洞邊緣
-        （±0.95，門洞半寬 ~1.12），使「轎廂→閘門」與「閘門→出口」兩段都與排隊格保持 MIN_SEP 以上。"""
+    def _lift_gate_point(self, l: dict[str, Any]) -> tuple[float, float]:
+        """閘門通過點（round-8c）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
+        x = 門面 − 車體半長 − 0.125 m 緩衝（= cx − 2.0）：到這裡整台車已完全離開門框。
+        排隊線退到 cell−3−i 後，門軸直行與佔用中的 slot0 相距 1.0 m ≥ 對接間距。"""
         cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
-        dz = max(-0.95, min(0.95, exit_[1] - cz))
-        return (cx - 1.7, cz + dz)
+        return (cx - (SIM["LIFT_SHAFT_HALF_X"] + SIM["ROBOT_HALF_LEN"] + 0.125), cz)
 
     def _pick_lift_exit(self, l: dict[str, Any], floor: int, skip: int = 0) -> tuple[float, float]:
         """出口節點（規格書 §6.4）：與排隊線分開；出轎廂走「門軸 → 閘門 → 出口」兩段路（round-8b），
@@ -442,8 +446,9 @@ class SimEngine:
                     return False
             return True
 
-        def clear(to: tuple[float, float]) -> bool:
-            g = self._lift_gate_point(l, to)   # 兩段都要淨空：轎廂→閘門、閘門→出口
+        g = self._lift_gate_point(l)
+
+        def clear(to: tuple[float, float]) -> bool:   # 兩段都要淨空：轎廂→閘門、閘門→出口
             return seg_clear(cabin[0], cabin[1], g[0], g[1]) and seg_clear(g[0], g[1], to[0], to[1])
 
         ok = []
@@ -638,8 +643,9 @@ class SimEngine:
             tf = rt.pending["floor"]   # 出口與間距全用目的樓層計算；r["floor"] 到抵達出口那一刻才翻
             if rt.lift_exit is None:
                 rt.lift_exit = self._pick_lift_exit(lay, tf); rt.lift_blocked_ticks = 0
-            # 兩段式出轎廂（round-8b）：先沿門軸穿出西側閘門，過了門檻才轉向出口節點 —— 不會斜穿護網/柱子
-            gate = self._lift_gate_point(lay, rt.lift_exit)
+            # 兩段式出轎廂（round-8c）：沿門軸正中央直行出閘門；門檻 = gate.x + 0.05（= 門面 − 車體半長 − 0.075 m），
+            # 即「車尾完全離開門框」才允許轉向出口節點 —— 不會斜穿門片、也不會轉向時掃到門框
+            gate = self._lift_gate_point(lay)
             through_gate = r["position"][0] <= gate[0] + 0.05
             leg_arrived = self._micro_move(r, rt.lift_exit if through_gate else gate, SIM["LIFT_BOARD_SPEED"], tf)
             arrived = through_gate and leg_arrived

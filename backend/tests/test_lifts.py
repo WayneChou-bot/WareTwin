@@ -170,8 +170,9 @@ def test_shaft_blocked_and_paths_avoid_it():
             c = l["cell"]
             assert g.cells[c[1] * g.cols + c[0]] == 1, f"{l['id']} cabin F{fl} not blocked"
             for i in range(3):
-                assert g.cells[c[1] * g.cols + (c[0] - 2 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
-            for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-1, -2), (-1, 2), (-2, 0)):
+                assert g.cells[c[1] * g.cols + (c[0] - 3 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
+            assert g.cells[c[1] * g.cols + (c[0] - 2)] != 1, f"{l['id']} gate cell F{fl} blocked"   # 門軸中繼格
+            for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
                 assert g.cells[(c[1] + dr) * g.cols + (c[0] + dc)] != 1, f"{l['id']} exit({dc},{dr}) F{fl} blocked"
     e = SimEngine(L, seed=13)
     e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
@@ -190,25 +191,43 @@ def test_shaft_blocked_and_paths_avoid_it():
 
 
 def test_alighting_exits_through_gate():
-    """出轎廂一律沿門軸先出西側閘門（round-8b）：井道範圍內不越側牆、絕不往東（柱子/護網）走"""
-    e = SimEngine(L, seed=17)
-    e.create_task("PICK", "CRITICAL", "SHELF-M05", "PACK-01")
-    e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02")
-    e.create_task("REPLENISH", "CRITICAL", "INBOUND-1", "SHELF-M30")
-    seen = 0
-    for _ in range(40000):
+    """出轎廂沿門軸直行（round-8c）：旋轉後車體包絡不出門洞、車尾離開門面才轉向；雙向與載貨/空車都驗證。
+    幾何常數與 3D 井道模型（W 2.8 / LEAF 1.12）一致，防止漂移。"""
+    assert SIM["LIFT_SHAFT_HALF_X"] * 2 == 2.8 and SIM["LIFT_DOOR_HALF_W"] == 1.12
+    e = SimEngine(L, seed=5)
+    tasks = [
+        e.create_task("PICK", "CRITICAL", "SHELF-M02", "PACK-01"),
+        e.create_task("PICK", "CRITICAL", "SHELF-M12", "PACK-02"),
+        e.create_task("PICK", "CRITICAL", "SHELF-M22", "SORT-01"),
+        e.create_task("REPLENISH", "CRITICAL", "INBOUND-1", "SHELF-M30"),
+        e.create_task("REPLENISH", "CRITICAL", "INBOUND-2", "SHELF-M40"),
+        e.create_task("PICK", "HIGH", "SHELF-M05", "PACK-01"),
+    ]
+    dirs = set(); lifts_seen = set(); loads = set()
+    for _ in range(90000):
         e.step()
         for r in e.state["robots"].values():
             if r["lift_stage"] != "ALIGHTING" or not r["lift_id"]:
                 continue
-            seen += 1
             l = next(x for x in L["lifts"] if x["id"] == r["lift_id"])
+            Ls = e.state["lifts"][l["id"]]
             cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
-            x = r["position"][0]; z = r["position"][2]
-            assert x <= cx + 0.1, f"{r['id']} moved east inside shaft ({x:.2f},{z:.2f})"
-            if x > cx - 1.4:
-                assert abs(z - cz) <= 1.15, f"{r['id']} crossing side fence ({x:.2f},{z:.2f})"
-    assert seen > 0
+            x = r["position"][0]; z = r["position"][2]; th = r["heading"]
+            half_x = abs(math.cos(th)) * SIM["ROBOT_HALF_LEN"] + abs(math.sin(th)) * SIM["ROBOT_HALF_W"]
+            half_z = abs(math.sin(th)) * SIM["ROBOT_HALF_LEN"] + abs(math.cos(th)) * SIM["ROBOT_HALF_W"]
+            door_plane = cx - SIM["LIFT_SHAFT_HALF_X"]
+            if x + half_x > door_plane:   # 車體仍接觸門平面/井道 → 完整包絡必須在門洞內
+                assert abs(z - cz) + half_z <= SIM["LIFT_DOOR_HALF_W"] + 1e-6, f"{r['id']} body outside door opening ({x:.2f},{z:.2f})"
+            if abs(z - cz) > 0.05:
+                assert x + half_x <= door_plane + 1e-6, f"{r['id']} turned before tail cleared the door plane ({x:.2f},{z:.2f})"
+            assert x <= cx + 0.1, f"{r['id']} moved east inside shaft"
+            if Ls["floor"] is not None:
+                dirs.add((r["floor"], Ls["floor"]))
+            lifts_seen.add(l["id"]); loads.add(r["load"]["current"] > 0)
+        if all(t["status"] in ("COMPLETED", "TRANSFERRED", "FAILED") for t in tasks) and len(dirs) >= 2:
+            break
+    assert (1, 2) in dirs and (2, 1) in dirs
+    assert lifts_seen and True in loads and False in loads
 
 
 def test_lift_lobby_congestion_resolves():

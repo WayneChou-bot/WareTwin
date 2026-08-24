@@ -101,7 +101,7 @@ WareTwin/
 ```bash
 cd backend && python -m pytest -q      # 47 tests: PRNG parity, A*, 20-min stress (no collisions < 0.5 m), determinism, lifts,
                                         #           low battery, intrusion, gridlock-free compound failure, WS/REST, AI, What-if
-cd frontend && npm test                 # 27 tests: same engine contract in TypeScript
+cd frontend && npm test                 # 28 tests: same engine contract in TypeScript
 ```
 
 ## ☁️ Deployment

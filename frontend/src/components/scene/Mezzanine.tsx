@@ -13,6 +13,9 @@ import type { LiftState } from "../../schema/twin_state";
 
 export const FLOOR_ELEV: Record<number, number> = Object.fromEntries((layout.floors ?? [{ id: 1, elevation: 0 }]).map((f) => [f.id, f.elevation]));
 
+/** 井道幾何（單一事實來源）：引擎的門區常數（SIM.LIFT_SHAFT_HALF_X / LIFT_DOOR_HALF_W）必須與此一致，測試防止漂移 */
+export const LIFT_SHAFT = { W: 2.8, D: 3.6, LEAF: 1.12 };
+
 /** 支撐柱固定位置（規格書 §4.4：不得穿過走道/貨架/等待區；沿 footprint 內緣與中線） */
 const COLUMNS: Array<[number, number]> = [
   [10, 41.5], [22, 41.5], [34, 41.5], [46, 41.5],
@@ -140,8 +143,8 @@ function Lift({ l, elev, lite }: { l: (typeof layout.lifts)[number]; elev: numbe
   const occRef = useRef<THREE.Mesh>(null!);
   const selectLift = useStore((s) => s.selectLift);
   const x = l.cell[0] + 0.5, z = l.cell[1] + 0.5;
-  const W = 2.8, D = 3.6, H = elev + 2.4;   // §5.4
-  const LEAF = 1.12;                          // 雙開門單片寬
+  const W = LIFT_SHAFT.W, D = LIFT_SHAFT.D, H = elev + 2.4;   // §5.4
+  const LEAF = LIFT_SHAFT.LEAF;                                 // 雙開門單片寬
   const steel = <meshStandardMaterial color="#2f3542" roughness={0.5} metalness={0.7} />;
   const frame = <meshStandardMaterial color="#171c26" roughness={0.45} metalness={0.75} />;
 
