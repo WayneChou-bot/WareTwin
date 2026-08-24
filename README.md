@@ -16,7 +16,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://typescriptlang.org)
 
-[**Live demo**](https://ware-twin.vercel.app) · [Demo script](docs/DEMO.md) · [Architecture](#-architecture) · [繁體中文](README.zh-TW.md)
+[**Live demo**](https://ware-twin.vercel.app) · [Architecture](#-architecture) · [繁體中文](README.zh-TW.md)
 
 <img src="docs/demo.gif" width="880" alt="WareTwin demo: 20 AMRs running, compound failure injected, VLM detects a human, Copilot explains the throughput drop" />
 
@@ -65,7 +65,7 @@ npm run dev          # → http://localhost:5173
 
 The top bar shows a blue **BACKEND** badge when the browser is connected to the Python engine, or an orange **LOCAL** badge when it is running the built-in fallback engine. On Windows, `dev.ps1` starts both.
 
-Then follow the [demo script](docs/DEMO.md) — ten scenarios, from normal operation to a compound failure handled end-to-end.
+Try injecting scenarios from the ⚡ panel — from normal operation to a compound failure handled end-to-end.
 
 ## 🧩 AI modes
 
@@ -121,13 +121,6 @@ The hosted demo is deliberately a **single shared simulation** — every visitor
 | Health | `/api/health` returns `503` when the simulation task died or has not advanced for `TWIN_HEALTH_STALL_S` seconds, so Render restarts it |
 
 Reads (`/api/state`, `/api/health`, …) are never limited. `TWIN_RATE_LIMIT=0` switches the limiter off for local development. The UI is built for desktop (best ≥ 1280 px, usable from 1024 px); narrower screens get a notice instead of an unreadable 0.25× layout, and the simulation is not started behind it. Audit history lives in SQLite on the instance and resets when the free-tier instance is replaced.
-
-## 🗺 Roadmap
-
-- [x] Phase 1 – 3D foundation · [x] Phase 2 – robot simulation · [x] Phase 3 – backend + WebSocket · [x] Phase 4 – operations · [x] Phase 5 – AI · [x] Phase 6 – What-if · [x] Phase 7 – on-robot perception · [x] Phase 8 – multi-floor + freight lifts, animated conveyors
-- [ ] Phase 9 – Robotics extension: feed robot poses from ROS 2 / Webots into `SimEngine.step()`; the Twin State contract and UI stay unchanged
-- [ ] Multi-agent path planning (CBS / time-window reservations) to replace the yield/back-off deadlock breaker
-- [ ] PostgreSQL + Redis for multi-instance deployments
 
 ## 📚 Data & acknowledgements
 

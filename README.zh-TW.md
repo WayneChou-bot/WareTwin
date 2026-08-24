@@ -15,7 +15,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)](https://python.org)
 
-[**線上 Demo**](https://ware-twin.vercel.app) · [Demo 腳本](docs/DEMO.md) · [架構](#-架構) · [English](README.md)
+[**線上 Demo**](https://ware-twin.vercel.app) · [架構](#-架構) · [English](README.md)
 
 <img src="docs/demo.gif" width="880" alt="WareTwin demo" />
 
@@ -64,7 +64,7 @@ npm run dev          # → http://localhost:5173
 
 TopBar 顯示藍色 **BACKEND** 代表瀏覽器已連上 Python 引擎；橘色 **LOCAL** 代表正在跑內建的備援引擎。Windows 可直接執行 `dev.ps1` 同時啟動兩者。
 
-接著照 [Demo 腳本](docs/DEMO.md) 走十個情境，從正常運作到端到端處理複合故障。
+接著可從 ⚡ 面板注入各種情境，從正常運作到端到端處理複合故障。
 
 ## 🧩 AI 模式
 
@@ -119,13 +119,6 @@ cd frontend && npm test                 # 32 個：TypeScript 引擎的相同契
 | Health | 模擬 task 死掉或超過 `TWIN_HEALTH_STALL_S` 秒沒推進，`/api/health` 回 `503`，Render 會自動重啟 |
 
 讀取（`/api/state`、`/api/health`…）不受限；本機開發可設 `TWIN_RATE_LIMIT=0` 關掉。介面為桌面設計（≥ 1280 px 最佳，1024 px 起可用），更窄的螢幕會看到提示頁而不是縮到 0.25 倍的畫面，且提示頁背後不會啟動模擬。審計紀錄存在 instance 上的 SQLite，free tier 更換 instance 時會重置。
-
-## 🗺 Roadmap
-
-- [x] Phase 1 3D 基礎 · [x] Phase 2 機器人模擬 · [x] Phase 3 後端 + WebSocket · [x] Phase 4 營運 · [x] Phase 5 AI · [x] Phase 6 What-if · [x] Phase 7 機上感知 · [x] Phase 8 多樓層 + 貨梯、輸送帶動畫
-- [ ] Phase 9 機器人擴充：把 ROS 2／Webots 的機器人位姿餵進 `SimEngine.step()`，Twin State 契約與 UI 不變
-- [ ] 多機協同規劃（CBS／時間窗預約）取代目前的讓路／退避死鎖解除
-- [ ] PostgreSQL + Redis 支援多實例部署
 
 ## 📚 資料與致謝
 
