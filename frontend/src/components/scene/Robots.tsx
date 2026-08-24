@@ -13,6 +13,16 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
   const lampRef = useRef<THREE.MeshBasicMaterial>(null!);
   const groupRef = useRef<THREE.Group>(null!);
   const wheelsRef = useRef<THREE.Group>(null!);
+  // ⚠ round-9 真因修正：transform 只能給「掛載當下」的初始值（穩定參照）。
+  // 若直接寫 position={[r.position[0], FLOOR_ELEV[r.floor], ...]}，props 內容每個 tick 都變，
+  // React 每次 re-render（10 Hz）都會把 useFrame 平滑後的 transform 覆寫回「原始座標 + FLOOR_ELEV(floor)」。
+  // 搭電梯時 floor 與實際高度不同（floor 到出電梯才翻），於是每 100 ms 被彈到錯誤高度再被 useFrame 拉回
+  // —— 這就是電梯上下與出門時鋸齒狀晃動的來源。初始高度也要 lift-aware（重新掛載時不從錯誤樓層彈出）。
+  const init = useRef<{ p: [number, number, number]; h: number } | null>(null);
+  if (!init.current) {
+    const L0 = r.lift_id ? useStore.getState().twin.lifts[r.lift_id] : null;
+    init.current = { p: [r.position[0], L0 ? L0.y : FLOOR_ELEV[r.floor] ?? 0, r.position[2]], h: -r.heading };
+  }
   // 模擬 10 Hz 更新位置，畫面 60 Hz：用指數平滑追上目標，移動才不會一格一格跳
   useFrame(({ clock }, dt) => {
     const g = groupRef.current;
@@ -39,7 +49,7 @@ export function RobotMesh({ r, selected, onSelect, showLabel, lite, smooth = tru
   });
   const loaded = r.load.current > 0;
   return (
-    <group ref={groupRef} position={[r.position[0], FLOOR_ELEV[r.floor] ?? 0, r.position[2]]} rotation-y={-r.heading}>
+    <group ref={groupRef} position={init.current.p} rotation-y={init.current.h}>
       <group onClick={(e) => { e.stopPropagation(); onSelect(); }} onPointerOver={() => (document.body.style.cursor = "pointer")} onPointerOut={() => (document.body.style.cursor = "")}>
         {/* 底盤 */}
         <mesh position={[0, 0.22, 0]} castShadow>
