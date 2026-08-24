@@ -503,6 +503,7 @@ describe("building pillars & charging dock（round-9d）", () => {
       for (let c = Math.max(0, Math.floor(x0)); c < Math.min(g.cols, Math.ceil(x1)); c++)
         for (let r = Math.max(0, Math.floor(z0)); r < Math.min(g.rows, Math.ceil(z1)); r++)
           expect(g.cells[r * g.cols + c], `${o.id} cell (${c},${r})`).toBe(1);
+      if (o.kind !== "PILLAR") continue;   // CONVEYOR_EQUIP（round-9f 端點機台）本來就位於輸送帶端點
       const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       for (const cv of layout.conveyors)
         for (let i = 0; i < cv.path.length - 1; i++) {
@@ -512,6 +513,40 @@ describe("building pillars & charging dock（round-9d）", () => {
         }
     }
   });
+
+  it("輸送帶端點機台封鎖網格、直向帶靠牆（貼牆窄道消失）、內側車道通暢、模擬不進機台範圍（round-9f）", () => {
+    const eq = (layout.obstacles ?? []).filter((o) => o.kind === "CONVEYOR_EQUIP");
+    expect(eq.length).toBeGreaterThan(0);
+    for (const cv of layout.conveyors)   // 每條輸送帶兩端都要有機台 footprint（單一資料源：端點 ±1.5 m）
+      for (const [px, pz] of [cv.path[0], cv.path[cv.path.length - 1]])
+        if (!eq.some((o) => o.rect[0] <= px && px <= o.rect[2] && o.rect[1] <= pz && pz <= o.rect[3]))
+          throw new Error(`${cv.id} endpoint (${px},${pz}) has no CONVEYOR_EQUIP obstacle`);
+    const g = buildNavGrid(layout as never, 1);
+    const at = (c: number, r: number) => g.cells[r * g.cols + c];
+    for (let r = 34; r <= 60; r++) {   // 直向帶身：帶到牆之間全封（貼牆窄道不存在）
+      expect(at(0, r), `west wall strip row ${r}`).toBe(1); expect(at(1, r), `west wall strip row ${r}`).toBe(1);
+      expect(at(98, r), `east wall strip row ${r}`).toBe(1); expect(at(99, r), `east wall strip row ${r}`).toBe(1);
+    }
+    for (let r = 37; r < 58; r++) {    // 機台範圍外的帶身側：內側車道保持通暢（西 4 格、東 5 格）
+      for (const c of [2, 3, 4, 5]) expect(at(c, r), `west inner lane (${c},${r})`).not.toBe(1);
+      for (const c of [93, 94, 95, 96, 97]) expect(at(c, r), `east inner lane (${c},${r})`).not.toBe(1);
+    }
+    for (let r = 33; r < 37; r++)      // 跨 z=35 的三處穿越口（西/中/東）都要通 —— 動線不得全擠進電梯廳前的中央走道
+      for (const c of [3, 4, 5, 6, 7, 48, 49, 50, 51, 92, 93, 94, 95, 96])
+        expect(at(c, r), `crossing cell (${c},${r})`).not.toBe(1);
+    const e = new SimEngine(layout, { seed: 11 });
+    const rects = (layout.obstacles ?? []).map((o) => o.rect);
+    for (let t = 0; t < 6000; t++) {
+      e.step();
+      for (const r of Object.values(e.state.robots)) {
+        if (r.floor !== 1 || r.lift_id) continue;
+        const [x, , z] = r.position;
+        for (const [x0, z0, x1, z1] of rects)
+          if (x0 + 0.1 < x && x < x1 - 0.1 && z0 + 0.1 < z && z < z1 - 0.1)
+            throw new Error(`${r.id} inside obstacle at (${x.toFixed(2)},${z.toFixed(2)})`);
+      }
+    }
+  }, 120000);
 
   it("充電機器人正好停在充電板中央、車頭朝樁、彼此不重疊", () => {
     const e = new SimEngine(layout, { seed: 3 });

@@ -631,8 +631,19 @@ export class SimEngine {
         const f = String(r.floor);
         const pos = L.queue[f].indexOf(r.id);
         if (pos < 0) { this.setLiftStage(r, rt, "TO_LIFT"); return true; }
-        // 遞補到自己該站的排隊格
-        this.microMove(r, this.liftSlot(lay, Math.min(pos, 2)), SIM.LIFT_QUEUE_SPEED);
+        // round-9f：遞補走「淨空帶」。從東側/偏離軸線直線切向排隊格，會斜插進登梯走廊，
+        // 和 BOARDING 中的隊首形成 OBB 互卡（一個等對方讓位、一個等對方走開，誰都不動）。
+        // 規則：x 已對正 → 垂直進格；在軸線上且位於自己格的西側 → 正常沿軸遞補；
+        // 其餘先橫向撤離軸線 1.8 m（遠離軸線的步必不被擋）→ 沿淨空帶平行走到格位正側 → 垂直進格。
+        const slot = this.liftSlot(lay, Math.min(pos, 2));
+        const dxs = r.position[0] - slot[0], dzs = r.position[2] - slot[1];
+        const side = dzs >= 0 ? 1 : -1;
+        let goal: [number, number];
+        if (Math.abs(dxs) < 0.25) goal = slot;
+        else if (Math.abs(dzs) < 0.25 && dxs < 0.35) goal = slot;
+        else if (Math.abs(dzs) > 1.55) goal = [slot[0], slot[1] + side * 1.8];
+        else goal = [r.position[0], slot[1] + side * 1.8];
+        this.microMove(r, goal, SIM.LIFT_QUEUE_SPEED);
         // 隊首 + 我的預約 + 門開著 → 開始上車
         if (pos === 0 && L.reserved_by === r.id && L.state === "BOARDING" && L.floor === r.floor) {
           this.setLiftStage(r, rt, "BOARDING");

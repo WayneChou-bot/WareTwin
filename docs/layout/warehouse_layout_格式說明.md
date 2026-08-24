@@ -80,5 +80,8 @@
 - `floors`: `[{id, name, elevation, footprint?}]` — 樓層清單；`elevation` 為樓板頂面高度 (m)，`footprint` 是二樓以上樓板的多邊形（之外視為不存在的樓板 = 障礙）。
 - `lifts`: `[{id, cell:[c,r], floors:[…], ride_ticks}]` — 貨梯；`cell` 在所有它連接的樓層都必須可走。一次載一台機器人，`ride_ticks` 為搭乘時間。
 - `columns`: `[[x, z], …]` — 夾層支撐柱位（立在 F1 地面、撐到樓板）。F1 導航網格以柱底板 0.9×0.9 m 封成障礙；不得放在取放點、充電樁、停車格、電梯排隊線/出口上。
-- `obstacles`: `[{id, kind:"PILLAR", rect:[x0,z0,x1,z1]}]` — 建築結構柱等實體障礙。F1 導航網格整塊封鎖；3D 場景（WarehouseShell）由此渲染，不再程序生成。不得放在輸送帶、走道、取放點上。
+- `obstacles`: `[{id, kind:"PILLAR"|"CONVEYOR_EQUIP", rect:[x0,z0,x1,z1]}]` — 實體障礙，F1 導航網格整塊封鎖。
+  - `PILLAR`：建築結構柱。3D 場景（WarehouseShell）由此渲染，不再程序生成。不得放在輸送帶、走道、取放點上。
+  - `CONVEYOR_EQUIP`（round-9f）：輸送帶端點機台（進料斗 / 接收機台）的 footprint，取端點 ±1.5 m。3D 由 Fixtures 的 endEquip 依 conveyor path 端點擺放（視覺），此處是對應的網格封鎖 —— 兩者的單一資料源都是 conveyors 的 path 端點（gen_layout.py 自動推導、端點去重）。機器人路徑因此會與機台保持車身間距，不再擦撞。
+- 輸送帶佈局（round-9f）：直向帶（CV03/CV04）靠牆（x=1.4 / 98.6），帶身封格直達牆面 —— 牆邊 1–2 格的貼牆窄道不存在，機器人一律走內側 4–6 m 車道；橫向帶（CV01/CV02）縮短為 x 10–46 / 54–90，兩端機台外側各留約 5 m 穿越口，跨 z=35 的動線分散成西（cols 3–7）/中（中央走道 cols 48–51）/東（cols 92–96）三處，不會全部擠進電梯廳前的中央走道。
 - `racks` / `locations` / `zones` / `cameras` / `spawn.robots` 皆可帶 `floor`（預設 1）。每個樓層有獨立導航網格（見 navgrid 的 floor 參數）。

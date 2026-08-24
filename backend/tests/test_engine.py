@@ -141,7 +141,10 @@ def test_pillars_blocked_and_charging_docks_on_pad():
         for c in range(max(0, math.floor(x0)), min(g.cols, math.ceil(x1))):
             for r in range(max(0, math.floor(z0)), min(g.rows, math.ceil(z1))):
                 assert g.cells[r * g.cols + c] == 1, f"{o['id']} cell ({c},{r}) not blocked"
-        # 柱子不得落在輸送帶上（round-9d 的視覺 bug：程序生成柱插在 CV01/CV02 上）
+        # 建築柱不得落在輸送帶上（round-9d 的視覺 bug：程序生成柱插在 CV01/CV02 上）
+        # —— 只檢查 PILLAR：CONVEYOR_EQUIP（round-9f 端點機台）本來就位於輸送帶端點
+        if o["kind"] != "PILLAR":
+            continue
         cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
         for cv in L["conveyors"]:
             for (ax, az), (bx, bz) in zip(cv["path"], cv["path"][1:]):
@@ -169,3 +172,40 @@ def test_pillars_blocked_and_charging_docks_on_pad():
             break
     assert len(seen) >= 2, "fewer than 2 robots ever charged"
     assert len(chg) >= 2, "second robot could not dock while first still charging (approach lane blocked)"
+
+def test_conveyor_end_equipment_blocked_and_lanes_wide():
+    """round-9f：端點機台 footprint 進 layout.obstacles 封鎖網格；直向輸送帶靠牆 ——
+    貼牆 1–2 格窄道消失（機器人不再貼牆走），內側車道 ≥4 格寬；模擬中機器人不進任何機台/柱子範圍"""
+    from app.sim.navgrid import build_nav_grid, load_layout
+    from app.sim.engine import SimEngine
+    L = load_layout()
+    eq = [o for o in L["obstacles"] if o["kind"] == "CONVEYOR_EQUIP"]
+    assert eq, "CONVEYOR_EQUIP obstacles missing"
+    for cv in L["conveyors"]:   # 每條輸送帶兩端都要有機台 footprint（單一資料源：端點 ±1.5 m）
+        for px, pz in (cv["path"][0], cv["path"][-1]):
+            assert any(o["rect"][0] <= px <= o["rect"][2] and o["rect"][1] <= pz <= o["rect"][3] for o in eq), \
+                f"{cv['id']} endpoint ({px},{pz}) has no CONVEYOR_EQUIP obstacle"
+    g = build_nav_grid(L, 1)
+    at = lambda c, r: g.cells[r * g.cols + c]
+    for r in range(34, 61):     # 直向帶身：帶到牆之間全封（貼牆窄道不存在）
+        assert at(0, r) == 1 and at(1, r) == 1, f"west wall strip row {r} not sealed"
+        assert at(98, r) == 1 and at(99, r) == 1, f"east wall strip row {r} not sealed"
+    for r in range(37, 58):     # 機台範圍外的帶身側：內側車道保持通暢（西 4 格、東 5 格）
+        for c in (2, 3, 4, 5):
+            assert at(c, r) != 1, f"west inner lane ({c},{r}) blocked"
+        for c in (93, 94, 95, 96, 97):
+            assert at(c, r) != 1, f"east inner lane ({c},{r}) blocked"
+    for r in range(33, 37):     # 跨 z=35 的三處穿越口（西/中/東）都要通 —— 動線不得全擠進電梯廳前的中央走道
+        for c in (*range(3, 8), *range(48, 52), *range(92, 97)):
+            assert at(c, r) != 1, f"crossing cell ({c},{r}) blocked"
+    e = SimEngine(L, seed=11)
+    rects = [o["rect"] for o in L["obstacles"]]
+    for _ in range(6000):
+        e.step()
+        for r in e.state["robots"].values():
+            if r["floor"] != 1 or r["lift_id"]:
+                continue
+            x, z = r["position"][0], r["position"][2]
+            for x0, z0, x1, z1 in rects:
+                assert not (x0 + 0.1 < x < x1 - 0.1 and z0 + 0.1 < z < z1 - 0.1), \
+                    f"{r['id']} inside obstacle at ({x:.2f},{z:.2f})"

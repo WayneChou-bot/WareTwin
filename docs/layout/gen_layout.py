@@ -123,16 +123,33 @@ layout["lifts"] = [
     {"id": "LIFT-2", "cell": [51, 56], "floors": [1, 2], "ride_ticks": 60},
 ]
 
-# ── Conveyors：中央橫向一條 + 左右各一條短的進 packing
+# ── Conveyors：中央橫向兩條 + 左右各一條直向（round-9f）：
+#    直向帶靠牆 x=1.4 / 98.6 —— 帶身封格直達牆面，貼牆的 1–2 格窄道消失，機器人一律走內側 4–6 m 車道；
+#    橫向帶縮短為 x 10–46 / 54–90 —— 兩端機台外側各留 5 m 穿越口（cols 3–7 / 92–96），
+#    跨 z=35 的動線分散成西/中/東三處，不會全部擠進電梯廳前的中央走道（會造成 ALIGHTING 挨餓）
 layout["conveyors"] = [
     {"id": "CV01", "name": "Conveyor #01", "zone": "A",
-     "path": [[2.5, 35], [46, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-02"},
+     "path": [[10, 35], [46, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-02"},
     {"id": "CV02", "name": "Conveyor #02", "zone": "B",
-     "path": [[54, 35], [97.5, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "SORT-01"},
+     "path": [[54, 35], [90, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "SORT-01"},
     {"id": "CV03", "name": "Conveyor #03", "zone": "D",
-     "path": [[97.5, 35], [97.5, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-01"},
-{"id": "CV04", "name": "Conveyor #03", "zone": "D",
-     "path": [[2.5, 35], [2.5, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, },
+     "path": [[98.6, 35], [98.6, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-01"},
+    {"id": "CV04", "name": "Conveyor #04", "zone": "C",
+     "path": [[1.4, 35], [1.4, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, },
+]
+
+# ── 輸送帶端點機台（round-9f）：進料斗 / 接收機台的實體 footprint（±1.5 m）進 obstacles ——
+#    3D 只是視覺（Fixtures endEquip 依 path 端點擺放），網格必須同步封鎖，機器人才不會擦撞。
+#    端點去重（西/東 L 轉角共用一台）。單一資料源：由 conveyors 端點推導。
+_eq_pts: list[tuple[float, float]] = []
+for _cv in layout["conveyors"]:
+    for _p in (_cv["path"][0], _cv["path"][-1]):
+        if (_p[0], _p[1]) not in _eq_pts:
+            _eq_pts.append((_p[0], _p[1]))
+layout["obstacles"] += [
+    {"id": f"CVEQ-{i+1:02d}", "kind": "CONVEYOR_EQUIP",
+     "rect": [round(x - 1.5, 2), round(z - 1.5, 2), round(x + 1.5, 2), round(z + 1.5, 2)]}
+    for i, (x, z) in enumerate(_eq_pts)
 ]
 
 # ── Stations：Packing / Sorting
@@ -195,7 +212,7 @@ layout["sensors"] = [
     {"id": "S-B01", "kind": "PRESENCE", "zone": "B", "position": [74, 1, 9]},
     {"id": "S-C01", "kind": "LIDAR", "zone": "C", "position": [50, 1, 50]},
     {"id": "S-D01", "kind": "LIDAR", "zone": "D", "position": [50, 1, 20]},
-    {"id": "S-CV03", "kind": "WEIGHT", "zone": "D", "position": [97.5, 0.5, 48]},
+    {"id": "S-CV03", "kind": "WEIGHT", "zone": "D", "position": [98.6, 0.5, 48]},
     {"id": "S-T01", "kind": "TEMP", "zone": "A", "position": [5, 3, 12]},
 ]
 

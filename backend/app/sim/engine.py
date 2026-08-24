@@ -654,7 +654,22 @@ class SimEngine:
             pos = L["queue"][f].index(r["id"]) if r["id"] in L["queue"][f] else -1
             if pos < 0:
                 self._set_lift_stage(r, rt, "TO_LIFT"); return True
-            self._micro_move(r, self._lift_slot(lay, min(pos, 2)), SIM["LIFT_QUEUE_SPEED"])
+            # round-9f：遞補走「淨空帶」。從東側/偏離軸線直線切向排隊格，會斜插進登梯走廊，
+            # 和 BOARDING 中的隊首形成 OBB 互卡（一個等對方讓位、一個等對方走開，誰都不動）。
+            # 規則：x 已對正 → 垂直進格；在軸線上且位於自己格的西側 → 正常沿軸遞補；
+            # 其餘先橫向撤離軸線 1.8 m（遠離軸線的步必不被擋）→ 沿淨空帶平行走到格位正側 → 垂直進格。
+            slot = self._lift_slot(lay, min(pos, 2))
+            dxs = r["position"][0] - slot[0]; dzs = r["position"][2] - slot[1]
+            side = 1.0 if dzs >= 0 else -1.0
+            if abs(dxs) < 0.25:
+                goal = slot
+            elif abs(dzs) < 0.25 and dxs < 0.35:
+                goal = slot
+            elif abs(dzs) > 1.55:
+                goal = (slot[0], slot[1] + side * 1.8)
+            else:
+                goal = (r["position"][0], slot[1] + side * 1.8)
+            self._micro_move(r, goal, SIM["LIFT_QUEUE_SPEED"])
             if pos == 0 and L["reserved_by"] == r["id"] and L["state"] == "BOARDING" and L["floor"] == r["floor"]:
                 self._set_lift_stage(r, rt, "BOARDING")
                 self.emit("ROBOT_BOARDING_STARTED", "LIFT", "INFO", f"{r['id']} boarding {rt.lift_id} → Floor {rt.pending['floor']}", robot_id=r["id"])
