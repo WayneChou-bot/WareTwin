@@ -126,3 +126,45 @@ def test_floor2_grid_matches_ts_rules():
     assert at(51.5, 44.5) == 1   # 電梯井道 = 障礙（round-8：進出轎廂走 micro-move，不經網格）
     assert at(20.5, 47.5) != 1   # 夾層走道
     assert at(80, 20) == 1       # footprint 外
+
+
+def test_pillars_blocked_and_charging_docks_on_pad():
+    """round-9d：建築柱進 layout.obstacles 並封鎖網格；充電機器人必須正好停在充電板中央、朝樁、不重疊"""
+    import math
+    from app.sim.navgrid import build_nav_grid, load_layout
+    from app.sim.engine import SimEngine
+    L = load_layout()
+    assert L.get("obstacles"), "layout.obstacles missing"
+    g = build_nav_grid(L, 1)
+    for o in L["obstacles"]:
+        x0, z0, x1, z1 = o["rect"]
+        for c in range(max(0, math.floor(x0)), min(g.cols, math.ceil(x1))):
+            for r in range(max(0, math.floor(z0)), min(g.rows, math.ceil(z1))):
+                assert g.cells[r * g.cols + c] == 1, f"{o['id']} cell ({c},{r}) not blocked"
+        # 柱子不得落在輸送帶上（round-9d 的視覺 bug：程序生成柱插在 CV01/CV02 上）
+        cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+        for cv in L["conveyors"]:
+            for (ax, az), (bx, bz) in zip(cv["path"], cv["path"][1:]):
+                if min(ax, bx) - 0.5 <= cx <= max(ax, bx) + 0.5 and min(az, bz) - 0.5 <= cz <= max(az, bz) + 0.5:
+                    raise AssertionError(f"{o['id']} sits on conveyor {cv['id']}")
+    e = SimEngine(L, seed=3)
+    for rid in list(e.state["robots"].keys())[:3]:
+        e.inject({"kind": "ROBOT_BATTERY_SET", "robot_id": rid, "battery": 25})
+    pads = [(c["position"][0], c["position"][2] - 1.3) for c in L["charging_stations"]]
+    seen = set()
+    for _ in range(20000):
+        e.step()
+        chg = [r for r in e.state["robots"].values() if r["fsm"] == "CHARGING"]
+        for r in chg:
+            d = min(math.hypot(r["position"][0] - p[0], r["position"][2] - p[1]) for p in pads)
+            assert d < 0.05, f"{r['id']} not docked on a pad (d={d:.2f})"
+            assert abs(r["heading"] - math.pi / 2) < 0.01, f"{r['id']} not facing the charger"
+        for i in range(len(chg)):
+            for j in range(i + 1, len(chg)):
+                assert not SimEngine.obb_overlap(chg[i]["position"][0], chg[i]["position"][2], chg[i]["heading"],
+                                                 chg[j]["position"][0], chg[j]["position"][2], chg[j]["heading"]), \
+                    f"{chg[i]['id']} overlaps {chg[j]['id']} while charging"
+        seen |= {r["id"] for r in chg}
+        if len(seen) >= 2:
+            break
+    assert len(seen) >= 2, "fewer than 2 robots ever charged"

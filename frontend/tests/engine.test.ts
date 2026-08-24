@@ -492,3 +492,46 @@ describe("lift exit faces the destination（round-8e）", () => {
     }
   });
 });
+
+describe("building pillars & charging dock（round-9d）", () => {
+  it("建築柱進 layout.obstacles、網格封鎖、且不落在輸送帶上", () => {
+    const obs = layout.obstacles ?? [];
+    expect(obs.length).toBeGreaterThan(0);
+    const g = buildNavGrid(layout as never, 1);
+    for (const o of obs) {
+      const [x0, z0, x1, z1] = o.rect;
+      for (let c = Math.max(0, Math.floor(x0)); c < Math.min(g.cols, Math.ceil(x1)); c++)
+        for (let r = Math.max(0, Math.floor(z0)); r < Math.min(g.rows, Math.ceil(z1)); r++)
+          expect(g.cells[r * g.cols + c], `${o.id} cell (${c},${r})`).toBe(1);
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      for (const cv of layout.conveyors)
+        for (let i = 0; i < cv.path.length - 1; i++) {
+          const [ax, az] = cv.path[i], [bx, bz] = cv.path[i + 1];
+          if (Math.min(ax, bx) - 0.5 <= cx && cx <= Math.max(ax, bx) + 0.5 && Math.min(az, bz) - 0.5 <= cz && cz <= Math.max(az, bz) + 0.5)
+            throw new Error(`${o.id} sits on conveyor ${cv.id}`);
+        }
+    }
+  });
+
+  it("充電機器人正好停在充電板中央、車頭朝樁、彼此不重疊", () => {
+    const e = new SimEngine(layout, { seed: 3 });
+    for (const rid of Object.keys(e.state.robots).slice(0, 3)) e.inject({ kind: "ROBOT_BATTERY_SET", robot_id: rid, battery: 25 } as never);
+    const pads = layout.charging_stations.map((c) => [c.position[0], c.position[2] - 1.3] as const);
+    const seen = new Set<string>();
+    for (let i = 0; i < 20000; i++) {
+      e.step();
+      const chg = Object.values(e.state.robots).filter((r) => r.fsm === "CHARGING");
+      for (const r of chg) {
+        const d = Math.min(...pads.map(([px, pz]) => Math.hypot(r.position[0] - px, r.position[2] - pz)));
+        if (d >= 0.05) throw new Error(`${r.id} not docked on a pad (d=${d.toFixed(2)})`);
+        if (Math.abs(r.heading - Math.PI / 2) >= 0.01) throw new Error(`${r.id} not facing the charger`);
+      }
+      for (let a = 0; a < chg.length; a++) for (let b = a + 1; b < chg.length; b++)
+        if (SimEngine.obbOverlap(chg[a].position[0], chg[a].position[2], chg[a].heading, chg[b].position[0], chg[b].position[2], chg[b].heading))
+          throw new Error(`${chg[a].id} overlaps ${chg[b].id} while charging`);
+      for (const r of chg) seen.add(r.id);
+      if (seen.size >= 2) break;
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(2);
+  }, 120000);
+});

@@ -835,6 +835,11 @@ class SimEngine:
             self._move_along_path(r, rt)
             if rt.target is None and rt.pending is None:
                 self._set_fsm(r, "CHARGING")
+                # 入塢對齊（round-9d）：停在自己充電樁的藍色充電板正中央、車頭朝樁 —— 前端補間呈現為入塢動作
+                chg = next((c for c in self.layout["charging_stations"] if c["id"] == rt.charger_id), None) if rt.charger_id else None
+                if chg:
+                    r["position"][0] = chg["position"][0]; r["position"][2] = chg["position"][2] - 1.3
+                    r["heading"] = math.pi / 2; r["velocity"] = 0
                 self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} charging started ({js_to_fixed0(r['battery'])}%)", robot_id=r["id"])
         elif f == "CHARGING":
             r["velocity"] = 0
@@ -966,7 +971,8 @@ class SimEngine:
             return
         start = to_cell(r["position"][0], r["position"][2])
         grid = self.grids[r["floor"]]
-        goal = (self._free_service_cell(r, point) if loc_id else None) or nearest_walkable(grid, point[0], point[1])
+        # TO_CHARGER 不用服務格（round-9d）：服務格會讓機器人散落在充電樁旁任意空格 —— 充電要直達自己那一樁的入口格
+        goal = (self._free_service_cell(r, point) if loc_id and phase != "TO_CHARGER" else None) or nearest_walkable(grid, point[0], point[1])
         path = astar(grid, start, goal, blocked=self._blocked_cells(r["id"], r["floor"]), cost_map=self._congestion_cost(r["floor"]))
         if path is None:
             path = astar(grid, start, goal)

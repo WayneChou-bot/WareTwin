@@ -807,7 +807,13 @@ export class SimEngine {
       }
       case "GOING_TO_CHARGE": {
         this.moveAlongPath(r, rt);
-        if (rt.target === null && !rt.pending) { this.setFsm(r, "CHARGING"); this.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", `${r.id} charging started (${r.battery.toFixed(0)}%)`, { robot_id: r.id }); }
+        if (rt.target === null && !rt.pending) {
+          this.setFsm(r, "CHARGING");
+          // 入塢對齊（round-9d）：停在自己充電樁的藍色充電板正中央、車頭朝樁 —— 前端補間呈現為入塢動作
+          const chg = rt.chargerId ? this.layout.charging_stations.find((c) => c.id === rt.chargerId) : undefined;
+          if (chg) { r.position[0] = chg.position[0]; r.position[2] = chg.position[2] - 1.3; r.heading = Math.PI / 2; r.velocity = 0; }
+          this.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", `${r.id} charging started (${r.battery.toFixed(0)}%)`, { robot_id: r.id });
+        }
         break;
       }
       case "CHARGING": {
@@ -921,7 +927,8 @@ export class SimEngine {
     }
     const start = toCell(r.position[0], r.position[2]);
     const grid = this.grids[r.floor];
-    const goal = (locId ? this.freeServiceCell(r, point) : null) ?? nearestWalkable(grid, point[0], point[1]);
+    // TO_CHARGER 不用服務格（round-9d）：服務格會讓機器人散落在充電樁旁任意空格 —— 充電要直達自己那一樁的入口格
+    const goal = (locId && phase !== "TO_CHARGER" ? this.freeServiceCell(r, point) : null) ?? nearestWalkable(grid, point[0], point[1]);
     const path = astar(grid, start, goal, { blocked: this.blockedCells(r.id, r.floor), costMap: this.congestionCost(r.floor) }) ?? astar(grid, start, goal) ?? [];
     r.path = path; r.path_index = 0; rt.target = goal; rt.phase = phase; rt.goalLoc = locId; rt.waitTicks = 0; rt.backingOff = false; rt.resumePoint = null;
     r.destination = locId;

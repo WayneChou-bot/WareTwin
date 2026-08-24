@@ -18,11 +18,11 @@ export function WarehouseShell({ lite = false }: { lite?: boolean }) {
     return t;
   }, [W, D]);
 
-  const pillars = useMemo(() => {
-    const pts: [number, number][] = [];
-    for (let x = 0; x <= W; x += 25) for (let z = 0; z <= D; z += 35) pts.push([x, z]);
-    return pts;
-  }, [W, D]);
+  // round-9d：柱位不再程序生成（舊版會把柱子長在輸送帶與中央走道上、且導航網格不知道）。
+  // 單一事實來源 = layout.obstacles（kind PILLAR），F1 網格用同一份資料封鎖 —— 視覺與路徑永遠一致。
+  const pillars = useMemo(() =>
+    (layout.obstacles ?? []).filter((o) => o.kind === "PILLAR").map((o) => [(o.rect[0] + o.rect[2]) / 2, (o.rect[1] + o.rect[3]) / 2] as [number, number]),
+  []);
 
   const aisleLines = useMemo(() => {
     // 中央走道與碼頭前走道的黃色標線

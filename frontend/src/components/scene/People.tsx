@@ -10,7 +10,8 @@ export function People({ lite = false }: { lite?: boolean }) {
   const explodeY = (floor: number) => (!lite && af === "exploded" && floor === 2 ? 5 : 0);   // lite（CCTV）場景平台不上移，人員也不能移
   const show = (floor: number) => activeFloor === "all" || floor === activeFloor;
   // Phase 1：固定幾個穿螢光背心的工作人員與一台堆高機（一樓裝飾），讓畫面有生氣
-  const staticWorkers: Array<[number, number, number]> = [[33, 0, 9], [66, 0, 9], [12, 0, 66], [89, 0, 60]];
+  // round-9d：裝飾人員全部移進維修區（RESTRICT-1，機器人禁入的封鎖區）——不再站在走道/充電排旁被機器人貼身經過
+  const staticWorkers: Array<[number, number, number]> = [[4.5, 0, 4.5], [9.5, 0, 2.5], [13.5, 0, 5.5], [16, 0, 2.5]];
   const forklift: [number, number, number] = [8, 0, 4];
   return (
     <group>

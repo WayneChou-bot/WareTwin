@@ -57,6 +57,8 @@ export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number
   for (const s of layout.stations) fillRect(s.rect[0], s.rect[1], s.rect[2], s.rect[3], 1);
   // 夾層支撐柱（立在 F1 地面、撐到樓板）：以柱底板 0.9×0.9 m 封成障礙 —— 路徑必須繞柱，不能穿過
   for (const [cx, cz] of layout.columns ?? []) fillRect(cx - 0.45, cz - 0.45, cx + 0.45, cz + 0.45, 1);
+  // 建築結構柱等實體障礙（round-9d）：整塊封鎖 —— 原本只在 3D 場景程序生成，網格不知道，機器人會穿柱
+  for (const o of layout.obstacles ?? []) fillRect(o.rect[0], o.rect[1], o.rect[2], o.rect[3], 1);
   blockLifts();
   return { cols, rows, cells };
 }

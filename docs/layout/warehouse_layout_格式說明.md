@@ -80,4 +80,5 @@
 - `floors`: `[{id, name, elevation, footprint?}]` — 樓層清單；`elevation` 為樓板頂面高度 (m)，`footprint` 是二樓以上樓板的多邊形（之外視為不存在的樓板 = 障礙）。
 - `lifts`: `[{id, cell:[c,r], floors:[…], ride_ticks}]` — 貨梯；`cell` 在所有它連接的樓層都必須可走。一次載一台機器人，`ride_ticks` 為搭乘時間。
 - `columns`: `[[x, z], …]` — 夾層支撐柱位（立在 F1 地面、撐到樓板）。F1 導航網格以柱底板 0.9×0.9 m 封成障礙；不得放在取放點、充電樁、停車格、電梯排隊線/出口上。
+- `obstacles`: `[{id, kind:"PILLAR", rect:[x0,z0,x1,z1]}]` — 建築結構柱等實體障礙。F1 導航網格整塊封鎖；3D 場景（WarehouseShell）由此渲染，不再程序生成。不得放在輸送帶、走道、取放點上。
 - `racks` / `locations` / `zones` / `cameras` / `spawn.robots` 皆可帶 `floor`（預設 1）。每個樓層有獨立導航網格（見 navgrid 的 floor 參數）。

@@ -86,5 +86,8 @@ def build_nav_grid(layout: dict[str, Any], floor: int = 1) -> NavGrid:
     # 夾層支撐柱（立在 F1 地面、撐到樓板）：以柱底板 0.9×0.9 m 封成障礙 —— 路徑必須繞柱，不能穿過
     for cx, cz in layout.get("columns", []):
         fill_rect(cx - 0.45, cz - 0.45, cx + 0.45, cz + 0.45, 1)
+    # 建築結構柱等實體障礙（round-9d）：整塊封鎖 —— 原本只在 3D 場景程序生成，網格不知道，機器人會穿柱
+    for o in layout.get("obstacles", []):
+        fill_rect(o["rect"][0], o["rect"][1], o["rect"][2], o["rect"][3], 1)
     block_lifts()
     return NavGrid(cols=cols, rows=rows, cells=cells)

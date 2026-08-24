@@ -42,6 +42,7 @@ export interface WarehouseLayout {
   cameras: LayoutCamera[];
   sensors: LayoutSensor[];
   locations: LayoutLocation[];
-  obstacles: unknown[];
+  /** 建築結構柱等實體障礙：F1 導航網格整塊封鎖；WarehouseShell 由此渲染柱子 */
+  obstacles: Array<{ id: string; kind: string; rect: [number, number, number, number] }>;
   spawn: { robots: LayoutSpawnRobot[] };
 }

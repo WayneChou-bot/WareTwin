@@ -39,7 +39,10 @@ layout = {
     "cameras": [],
     "sensors": [],
     "locations": [],
-    "obstacles": [],
+    "obstacles": [   # 建築結構柱（round-9d）：周界沿牆；兩根內部柱嵌進貨架列縫（原程序生成的 (25,35)/(75,35) 落在輸送帶上、(50,35) 落在中央走道 —— 已修正；中央走道採大跨距桁架不落柱
+        {"id": f"PILLAR-{i+1:02d}", "kind": "PILLAR", "rect": [round(x-0.25,2), round(z-0.25,2), round(x+0.25,2), round(z+0.25,2)]}
+        for i, (x, z) in enumerate([(x, z) for x in range(0, 101, 25) for z in (0, 70)] + [(0, 35), (100, 35), (23.7, 29.2), (73.7, 29.2)])
+    ],
     "spawn": {"robots": []},
 }
 
