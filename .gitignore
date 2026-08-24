@@ -4,6 +4,7 @@ dist/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # secrets & local state
 backend/.env
@@ -11,10 +12,11 @@ backend/.env
 *.db-wal
 *.db-shm
 
-# private design material (not licensed for redistribution)
-docs/專案參考圖片/
-專案參考圖片/
-專案規格.docx
+# local working files (kept out of the repo)
+*.docx
+/*.txt
+docs/DEMO.md
+docs/screenshots/
 docs/layout/layout_preview.png
 
 # editors / OS
@@ -22,15 +24,3 @@ docs/layout/layout_preview.png
 .idea/
 .DS_Store
 Thumbs.db
-
-# personal media & internal docs (never pushed)
-圖片/
-影片/
-docs/UI元件清單.md
-conda activate warehouse-twin.txt
-異常影片/
-多樓層＋電梯規格書.docx
-多樓層＋電梯補強規格書.docx
-發文內容.txt
-docs/DEMO.md
-docs/screenshots/
