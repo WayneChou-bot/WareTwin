@@ -416,9 +416,10 @@ class SimEngine:
 
     @staticmethod
     def _lift_slot(l: dict[str, Any], i: int) -> tuple[float, float]:
-        # 排隊格（round-8c 退門一格）：slot0 = cell−3，距門面 1.6 m 的緩衝區 —— 出轎廂才能
-        # 「沿門軸直行 + 車體完全出框」又與佔用中的 slot0 保持 ≥ 1.0 m；舊的 cell−2 幾何上塞不下這三個條件
-        return (l["cell"][0] - 3 - i + 0.5, l["cell"][1] + 0.5)
+        # 排隊格（round-9b 再退一格）：slot0 = cell−4，距轉向安全點 1.916 m ——
+        # 原地旋轉掃掠（對角半徑 0.584）對上任意朝向的排隊車（最壞 0.584）需要 ≥ 1.17 m 才保證不碰；
+        # 舊的 cell−3（相距 0.916 m）光是兩台面對面站著（0.475+0.475=0.95）就會車體重疊
+        return (l["cell"][0] - 4 - i + 0.5, l["cell"][1] + 0.5)
 
     @staticmethod
     def _lift_cabin(l: dict[str, Any]) -> tuple[float, float]:
@@ -428,7 +429,7 @@ class SimEngine:
         """閘門通過點＝轉向安全點（round-8d）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
         x = 門面 − 車體【對角半徑】− 0.10 m 餘裕（≈ cx − 2.084）：長方形車體原地旋轉的掃掠圓半徑是
         √(半長² + 半寬²) ≈ 0.584 m，只用半長會在最不利角度侵入門面 —— 到這裡整台車連旋轉都不碰門框。
-        排隊線在 cell−3−i，此點與佔用中的 slot0 相距 ≈ 0.916 m。"""
+        排隊線在 cell−4−i（round-9b），此點與佔用中的 slot0 相距 ≈ 1.916 m —— 原地旋轉掃掠對排隊車也安全。"""
         cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
         return (cx - (SIM["LIFT_SHAFT_HALF_X"] + math.hypot(SIM["ROBOT_HALF_LEN"], SIM["ROBOT_HALF_W"]) + 0.10), cz)
 
@@ -456,13 +457,24 @@ class SimEngine:
 
         # round-8e：出口不再固定順序輪流，改成「離下一個目的地最近優先」——目的地在南邊就往南出，不會轉錯邊繞路；
         # 貼著圍籬的 (-2, ±2) 加 0.75 m 懲罰，路線不再沿著井道邊框平行走
+        # round-9b：站立淨空 —— 站上出口後還要能原地轉向離開（對角半徑 + 對方半長），太靠近站立車的候選不選
+        stand_clear_r = math.hypot(SIM["ROBOT_HALF_LEN"], SIM["ROBOT_HALF_W"]) + SIM["ROBOT_HALF_LEN"]
+
+        def stand_clear(p: tuple[float, float]) -> bool:
+            for o in self.state["robots"].values():
+                if o["floor"] != floor or o["lift_id"] or o["velocity"] > 0.1:
+                    continue
+                if math.hypot(p[0] - o["position"][0], p[1] - o["position"][2]) < stand_clear_r:
+                    return False
+            return True
+
         ok: list[tuple[float, tuple[float, float]]] = []
         for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
             c = l["cell"][0] + dc; r_ = l["cell"][1] + dr
             if not is_walkable(grid, c, r_):
                 continue
             pnt = (c + 0.5, r_ + 0.5)
-            if not clear(pnt):
+            if not clear(pnt) or not stand_clear(pnt):
                 continue
             hug = 0.75 if (dc == -2 and dr != 0) else 0.0
             key = (math.hypot(pnt[0] - toward[0], pnt[1] - toward[1]) if toward else 0.0) + hug
@@ -471,6 +483,19 @@ class SimEngine:
         if ok:
             return ok[skip % len(ok)][1]
         return (l["cell"][0] - 2 + 0.5, l["cell"][1] - 2 + 0.5)
+
+    @staticmethod
+    def obb_overlap(ax: float, az: float, ah: float, bx: float, bz: float, bh: float, margin: float = 0.0) -> bool:
+        """兩個旋轉矩形車體（OBB）是否相交 —— 分離軸定理（SAT），margin 為額外安全間隙（round-9b）"""
+        hl = SIM["ROBOT_HALF_LEN"]; hw = SIM["ROBOT_HALF_W"]
+        dx = bx - ax; dz = bz - az
+        for t in (ah, ah + math.pi / 2, bh, bh + math.pi / 2):
+            ux = math.cos(t); uz = math.sin(t)
+            ra = hl * abs(ux * math.cos(ah) + uz * math.sin(ah)) + hw * abs(-ux * math.sin(ah) + uz * math.cos(ah))
+            rb = hl * abs(ux * math.cos(bh) + uz * math.sin(bh)) + hw * abs(-ux * math.sin(bh) + uz * math.cos(bh))
+            if abs(dx * ux + dz * uz) > ra + rb + margin:
+                return False   # 找到分離軸 → 不相交
+        return True
 
     def _micro_move(self, r: dict[str, Any], to: tuple[float, float], speed: float, floor_override: Optional[int] = None) -> bool:
         fl = floor_override if floor_override is not None else r["floor"]
@@ -482,11 +507,17 @@ class SimEngine:
         nx = r["position"][0] + (dx / dist) * step; nz = r["position"][2] + (dz / dist) * step
         # 排隊/進出轎廂維持物理間距，但用「對接模式」的 LIFT_SEP（0.6 m）：低速微移動
         # 若沿用走道的 MIN_SEP 0.9，門軸走廊會和排隊線在 0.9 m 標距上互相卡死（BOARDING ↔ TO_LIFT 對峙）
+        move_h = math.atan2(dz, dx)
         for oid, o in self.state["robots"].items():
             if oid == r["id"] or o["floor"] != fl or o["lift_id"]:
                 continue
             dn = math.hypot(nx - o["position"][0], nz - o["position"][2])
-            if dn < SIM["LIFT_SEP"] and dn < math.hypot(r["position"][0] - o["position"][0], r["position"][2] - o["position"][2]):
+            dcur = math.hypot(r["position"][0] - o["position"][0], r["position"][2] - o["position"][2])
+            if dn < SIM["LIFT_SEP"] and dn < dcur:
+                r["velocity"] = 0; return False
+            # round-9b：中心距之外再驗「旋轉車體 OBB」不相交（+5 cm 間隙）——只擋「會更靠近」的步，
+            # 遠離中的分開動作放行，否則已重疊的既有狀態會鎖死
+            if dn < dcur and dn < 1.5 and self.obb_overlap(nx, nz, move_h, o["position"][0], o["position"][2], o["heading"], 0.05):
                 r["velocity"] = 0; return False
         r["position"][0] = nx; r["position"][2] = nz
         r["heading"] = math.atan2(dz, dx); r["velocity"] = speed
@@ -1029,12 +1060,14 @@ class SimEngine:
         step_len = min(dist, r["velocity"] * SIM["TICK_S"])
         if dist > 1e-6:
             nx = pos[0] + (dx / dist) * step_len; nz = pos[2] + (dz / dist) * step_len
-            # 物理防撞：這一步會讓我跟某台的中心距低於 MIN_SEP 且比現在更近 → 不走
+            # 物理防撞：這一步會讓我跟某台「更靠近」且（中心距 < MIN_SEP 或旋轉車體 OBB 相交 +5cm）→ 不走（round-9b 補 OBB）
             for oid, o in self.state["robots"].items():
                 if oid == r["id"] or o["floor"] != fl:
                     continue
                 dn = math.hypot(nx - o["position"][0], nz - o["position"][2])
-                if dn < SIM["MIN_SEP"] and dn < math.hypot(pos[0] - o["position"][0], pos[2] - o["position"][2]):
+                dcur = math.hypot(pos[0] - o["position"][0], pos[2] - o["position"][2])
+                hit = dn < dcur and (dn < SIM["MIN_SEP"] or (dn < 1.5 and self.obb_overlap(nx, nz, r["heading"], o["position"][0], o["position"][2], o["heading"], 0.05)))
+                if hit:
                     r["velocity"] = 0; rt.wait_ticks += 1; r["stats"]["wait_ticks"] += 1
                     if rt.wait_ticks >= SIM["WAIT_BACKOFF_TICKS"]:
                         self._back_off(r, rt)
@@ -1055,6 +1088,10 @@ class SimEngine:
                 rt.target = None; r["velocity"] = 0; r["path"] = []; r["path_index"] = 0; r["eta_s"] = 0
                 if rt.backing_off and rt.resume_point:
                     rp = rt.resume_point; rt.backing_off = False; rt.resume_point = None
+                    # round-9b：TO_LIFT 途中讓路後的恢復規劃沿用原本的電梯（除非它故障）——
+                    # 否則 _plan_to 的跨樓分支會重擲電梯選擇，破壞「派工稽核 = 實際電梯」的一致性
+                    if rt.lift_stage == "TO_LIFT" and rt.lift_id and not self.state["lifts"].get(rt.lift_id, {}).get("fault"):
+                        rt.planned_lift_id = rt.lift_id
                     self._plan_to(r, rt, rp, rt.phase or "TO_SOURCE", rt.goal_loc)
         if self.state["sim"]["tick"] % 10 == 0:
             self._update_eta(r)

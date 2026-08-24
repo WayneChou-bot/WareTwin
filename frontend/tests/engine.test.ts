@@ -368,7 +368,7 @@ describe("lift shaft as nav obstacle（round-8）", () => {
       const g = buildNavGrid(layout as never, fl);
       for (const l of layout.lifts) {
         expect(g.cells[l.cell[1] * g.cols + l.cell[0]], `${l.id} cabin F${fl}`).toBe(1);
-        for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 3 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
+        for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 4 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
         expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 2)], `${l.id} gate cell F${fl}`).not.toBe(1);   // 門軸中繼格
         for (const [dc, dr] of [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-3, -2], [-3, 2], [-2, 0]])
           expect(g.cells[(l.cell[1] + dr) * g.cols + (l.cell[0] + dc)], `${l.id} exit(${dc},${dr}) F${fl}`).not.toBe(1);
@@ -445,6 +445,13 @@ describe("alighting exits through the gate（round-8d 三階段 + OBB）", () =>
         prev[r.id] = { x, z, h };
         if (L.floor !== null) dirs.add(`${r.floor}->${L.floor}`);
         liftsSeen.add(l.id); loads.add(r.load.current > 0);
+        // round-9b：離梯車與排隊/前往電梯車的旋轉車體（OBB）不得相交（同一實體樓層）
+        for (const b of Object.values(eng.state.robots)) {
+          if (b.id === r.id || !["TO_LIFT", "QUEUED", "BOARDING"].includes(b.lift_stage ?? "")) continue;
+          if (L.floor === null || b.floor !== L.floor) continue;
+          if (SimEngine.obbOverlap(r.position[0], r.position[2], r.heading, b.position[0], b.position[2], b.heading))
+            throw new Error(`${r.id}(ALIGHTING) body overlaps ${b.id}(${b.lift_stage}) at tick ${eng.state.sim.tick}`);
+        }
       }
       if (tasks.every((t) => t.status === "COMPLETED" || t.status === "TRANSFERRED" || t.status === "FAILED") && dirs.size >= 2) break;
     }

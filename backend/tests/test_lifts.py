@@ -170,7 +170,7 @@ def test_shaft_blocked_and_paths_avoid_it():
             c = l["cell"]
             assert g.cells[c[1] * g.cols + c[0]] == 1, f"{l['id']} cabin F{fl} not blocked"
             for i in range(3):
-                assert g.cells[c[1] * g.cols + (c[0] - 3 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
+                assert g.cells[c[1] * g.cols + (c[0] - 4 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
             assert g.cells[c[1] * g.cols + (c[0] - 2)] != 1, f"{l['id']} gate cell F{fl} blocked"   # 門軸中繼格
             for dc, dr in ((-2, -2), (-2, 2), (-3, -1), (-3, 1), (-3, -2), (-3, 2), (-2, 0)):
                 assert g.cells[(c[1] + dr) * g.cols + (c[0] + dc)] != 1, f"{l['id']} exit({dc},{dr}) F{fl} blocked"
@@ -238,6 +238,15 @@ def test_alighting_exits_through_gate():
             if Ls["floor"] is not None:
                 dirs.add((r["floor"], Ls["floor"]))
             lifts_seen.add(l["id"]); loads.add(r["load"]["current"] > 0)
+            # round-9b：離梯車與排隊/前往電梯車的旋轉車體（OBB）不得相交（同一實體樓層）
+            for b in e.state["robots"].values():
+                if b["id"] == r["id"] or b["lift_stage"] not in ("TO_LIFT", "QUEUED", "BOARDING"):
+                    continue
+                if Ls["floor"] is None or b["floor"] != Ls["floor"]:
+                    continue
+                assert not SimEngine.obb_overlap(r["position"][0], r["position"][2], r["heading"],
+                                                 b["position"][0], b["position"][2], b["heading"]), \
+                    f"{r['id']}(ALIGHTING) body overlaps {b['id']}({b['lift_stage']}) at tick {e.state['sim']['tick']}"
         if all(t["status"] in ("COMPLETED", "TRANSFERRED", "FAILED") for t in tasks) and len(dirs) >= 2:
             break
     assert (1, 2) in dirs and (2, 1) in dirs

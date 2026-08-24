@@ -416,9 +416,10 @@ export class SimEngine {
   // ─────────────────────────────────────────────────────────
   private liftLayout(id: string) { return this.layout.lifts.find((l) => l.id === id)!; }
   private elevOf(floor: number): number { return this.layout.floors.find((f) => f.id === floor)?.elevation ?? 0; }
-  /** 排隊格（round-8c 退門一格）：slot0 = cell−3，距門面 1.6 m 的緩衝區 —— 出轎廂才能「沿門軸直行 + 車體完全出框」
-   *  又與佔用中的 slot0 保持 ≥ 1.0 m；舊的 cell−2（距門面 0.6 m）在幾何上塞不下這三個條件。 */
-  private liftSlot(l: (typeof this.layout.lifts)[number], i: number): [number, number] { return [l.cell[0] - 3 - i + 0.5, l.cell[1] + 0.5]; }
+  /** 排隊格（round-9b 再退一格）：slot0 = cell−4，距轉向安全點 1.916 m ——
+   *  原地旋轉的掃掠圓（對角半徑 0.584）對上任意朝向的排隊車（最壞也是 0.584）需要 ≥ 1.17 m 才保證不碰；
+   *  舊的 cell−3（相距 0.916 m）光是兩台面對面站著（0.475+0.475=0.95）就會車體重疊。 */
+  private liftSlot(l: (typeof this.layout.lifts)[number], i: number): [number, number] { return [l.cell[0] - 4 - i + 0.5, l.cell[1] + 0.5]; }
   private liftCabin(l: (typeof this.layout.lifts)[number]): [number, number] { return [l.cell[0] + 0.5, l.cell[1] + 0.5]; }
   /** 出口節點（規格書 §6.4）：與排隊線分開，且「從轎廂到出口的直線」必須避開所有站著的機器人（排隊/閒置），
    *  一次選定（sticky），被擋太久才換下一個候選 —— 避免每 tick 換目標造成的原地震盪。 */
@@ -443,12 +444,21 @@ export class SimEngine {
       segClear(cabin[0], cabin[1], g[0], g[1]) && segClear(g[0], g[1], to[0], to[1]);
     // round-8e：出口不再固定順序輪流，改成「離下一個目的地最近優先」——目的地在南邊就往南出，不會轉錯邊繞路；
     // 貼著圍籬的 (-2,±2) 加 0.75 m 懲罰，路線不再沿著井道邊框平行走
+    // round-9b：站立淨空 —— 站上出口後還要能原地轉向離開（對角半徑 + 對方半長），太靠近站立車的候選不選
+    const STAND_CLEAR = Math.hypot(SIM.ROBOT_HALF_LEN, SIM.ROBOT_HALF_W) + SIM.ROBOT_HALF_LEN;
+    const standClear = (p: [number, number]) => {
+      for (const o of Object.values(this.state.robots)) {
+        if (o.floor !== floor || o.lift_id || o.velocity > 0.1) continue;
+        if (Math.hypot(p[0] - o.position[0], p[1] - o.position[2]) < STAND_CLEAR) return false;
+      }
+      return true;
+    };
     const ok: Array<{ p: [number, number]; key: number }> = [];
     for (const [dc, dr] of cand) {
       const c = l.cell[0] + dc, r = l.cell[1] + dr;
       if (!isWalkable(grid, c, r)) continue;
       const p: [number, number] = [c + 0.5, r + 0.5];
-      if (!clear(p)) continue;
+      if (!clear(p) || !standClear(p)) continue;
       const hug = dc === -2 && dr !== 0 ? 0.75 : 0;
       ok.push({ p, key: (toward ? Math.hypot(p[0] - toward[0], p[1] - toward[1]) : 0) + hug });
     }
@@ -460,10 +470,23 @@ export class SimEngine {
   /** 閘門通過點＝轉向安全點（round-8d）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
    *  x = 門面 − 車體【對角半徑】− 0.10 m 餘裕（≈ cx − 2.084）：長方形車體原地旋轉的掃掠圓半徑是
    *  √(半長² + 半寬²) ≈ 0.584 m，只用半長會在最不利角度侵入門面 —— 到這裡整台車連旋轉都不碰門框。
-   *  排隊線在 cell−3−i，此點與佔用中的 slot0 相距 ≈ 0.916 m。 */
+   *  排隊線在 cell−4−i（round-9b），此點與佔用中的 slot0 相距 ≈ 1.916 m —— 原地旋轉掃掠對排隊車也安全。 */
   private liftGatePoint(l: (typeof this.layout.lifts)[number]): [number, number] {
     const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
     return [cx - (SIM.LIFT_SHAFT_HALF_X + Math.hypot(SIM.ROBOT_HALF_LEN, SIM.ROBOT_HALF_W) + 0.10), cz];
+  }
+
+  /** 兩個旋轉矩形車體（OBB）是否相交 —— 分離軸定理（SAT），margin 為額外安全間隙（round-9b） */
+  static obbOverlap(ax: number, az: number, ah: number, bx: number, bz: number, bh: number, margin = 0): boolean {
+    const hl = SIM.ROBOT_HALF_LEN, hw = SIM.ROBOT_HALF_W;
+    const dx = bx - ax, dz = bz - az;
+    for (const t of [ah, ah + Math.PI / 2, bh, bh + Math.PI / 2]) {
+      const ux = Math.cos(t), uz = Math.sin(t);
+      const ra = hl * Math.abs(ux * Math.cos(ah) + uz * Math.sin(ah)) + hw * Math.abs(-ux * Math.sin(ah) + uz * Math.cos(ah));
+      const rb = hl * Math.abs(ux * Math.cos(bh) + uz * Math.sin(bh)) + hw * Math.abs(-ux * Math.sin(bh) + uz * Math.cos(bh));
+      if (Math.abs(dx * ux + dz * uz) > ra + rb + margin) return false;   // 找到分離軸 → 不相交
+    }
+    return true;
   }
 
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
@@ -476,11 +499,16 @@ export class SimEngine {
     const nx = r.position[0] + (dx / dist) * step, nz = r.position[2] + (dz / dist) * step;
     // 排隊/進出轎廂維持物理間距，但用「對接模式」的 LIFT_SEP（0.6 m）：低速（0.6–0.9 m/s）微移動
     // 若沿用走道的 MIN_SEP 0.9，門軸走廊會和排隊線在 0.9 m 標距上互相卡死（BOARDING ↔ TO_LIFT 對峙）
+    const moveH = Math.atan2(dz, dx);
     for (const id in this.state.robots) {
       if (id === r.id) continue; const o = this.state.robots[id];
       if (o.floor !== fl || o.lift_id) continue;
       const dn = Math.hypot(nx - o.position[0], nz - o.position[2]);
-      if (dn < SIM.LIFT_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; return false; }
+      const dcur = Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2]);
+      if (dn < SIM.LIFT_SEP && dn < dcur) { r.velocity = 0; return false; }
+      // round-9b：中心距之外再驗「旋轉車體 OBB」不相交（+5 cm 間隙）——只擋「會更靠近」的步，
+      // 遠離中的分開動作放行，否則已重疊的既有狀態會鎖死
+      if (dn < dcur && dn < 1.5 && SimEngine.obbOverlap(nx, nz, moveH, o.position[0], o.position[2], o.heading, 0.05)) { r.velocity = 0; return false; }
     }
     r.position[0] = nx; r.position[2] = nz;
     r.heading = Math.atan2(dz, dx); r.velocity = speed;
@@ -978,12 +1006,14 @@ export class SimEngine {
     const stepLen = Math.min(dist, r.velocity * SIM.TICK_S);
     if (dist > 1e-6) {
       const nx = r.position[0] + (dx / dist) * stepLen, nz = r.position[2] + (dz / dist) * stepLen;
-      // 物理防撞：這一步會讓我跟某台的中心距低於 MIN_SEP 且比現在更近 → 不走（等下一 tick 或重新規劃）
+      // 物理防撞：這一步會讓我跟某台「更靠近」且（中心距 < MIN_SEP 或旋轉車體 OBB 相交 +5cm）→ 不走（round-9b 補 OBB）
       for (const id in this.state.robots) {
         if (id === r.id) continue; const o = this.state.robots[id];
         if (o.floor !== r.floor) continue;   // 不同樓層 2D 座標會重疊，物理間距只看同樓層
         const dn = Math.hypot(nx - o.position[0], nz - o.position[2]);
-        if (dn < SIM.MIN_SEP && dn < Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2])) { r.velocity = 0; rt.waitTicks++; r.stats.wait_ticks++; if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) this.backOff(r, rt); return; }
+        const dcur = Math.hypot(r.position[0] - o.position[0], r.position[2] - o.position[2]);
+        const hit = dn < dcur && (dn < SIM.MIN_SEP || (dn < 1.5 && SimEngine.obbOverlap(nx, nz, r.heading, o.position[0], o.position[2], o.heading, 0.05)));
+        if (hit) { r.velocity = 0; rt.waitTicks++; r.stats.wait_ticks++; if (rt.waitTicks >= SIM.WAIT_BACKOFF_TICKS) this.backOff(r, rt); return; }
       }
       r.position[0] = nx; r.position[2] = nz;
       rt.waitTicks = 0;   // 真的動了才算解除阻塞
@@ -996,7 +1026,13 @@ export class SimEngine {
       this.occupancy.set(cellKey(next[0], next[1]), r.id);
       if (r.path_index >= r.path.length) {
         rt.target = null; r.velocity = 0; r.path = []; r.path_index = 0; r.eta_s = 0;
-        if (rt.backingOff && rt.resumePoint) { const rp = rt.resumePoint; rt.backingOff = false; rt.resumePoint = null; this.planTo(r, rt, rp, rt.phase, rt.goalLoc); }
+        if (rt.backingOff && rt.resumePoint) {
+          const rp = rt.resumePoint; rt.backingOff = false; rt.resumePoint = null;
+          // round-9b：TO_LIFT 途中讓路後的恢復規劃沿用原本的電梯（除非它故障）——
+          // 否則 planTo 的跨樓分支會重擲電梯選擇，破壞「派工稽核 = 實際電梯」的一致性
+          if (rt.liftStage === "TO_LIFT" && rt.liftId && !this.state.lifts[rt.liftId]?.fault) rt.plannedLiftId = rt.liftId;
+          this.planTo(r, rt, rp, rt.phase, rt.goalLoc);
+        }
       }
     }
     if (this.state.sim.tick % 10 === 0) this.updateEta(r);
