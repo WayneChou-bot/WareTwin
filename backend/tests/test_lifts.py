@@ -169,6 +169,10 @@ def test_shaft_blocked_and_paths_avoid_it():
         for l in L["lifts"]:
             c = l["cell"]
             assert g.cells[c[1] * g.cols + c[0]] == 1, f"{l['id']} cabin F{fl} not blocked"
+            # round-9g：南北面（cell±2 列）也必須封 —— 井道深 3.6 m，只封 3 列時護網突出到可走格
+            for dc in (-1, 0, 1):
+                for dr in (-2, 2):
+                    assert g.cells[(c[1] + dr) * g.cols + (c[0] + dc)] == 1, f"{l['id']} face({dc},{dr}) F{fl} not blocked"
             for i in range(3):
                 assert g.cells[c[1] * g.cols + (c[0] - 4 - i)] != 1, f"{l['id']} queue{i} F{fl} blocked"
             assert g.cells[c[1] * g.cols + (c[0] - 2)] != 1, f"{l['id']} gate cell F{fl} blocked"   # 門軸中繼格
@@ -195,6 +199,18 @@ def test_shaft_blocked_and_paths_avoid_it():
     def in_column(x: float, z: float) -> bool:
         return any(abs(x - cx) < 0.45 and abs(z - cz) < 0.45 for cx, cz in cols)
 
+    import math as _math
+    HL, HW = 0.475, 0.34   # = SIM.ROBOT_HALF_LEN / ROBOT_HALF_W
+
+    def body_in_shaft(x: float, z: float, h: float) -> bool:
+        # round-9g：車身四角（OBB）不得進入井道「視覺」矩形（W 2.8 × D 3.6）——中心點檢查抓不到貼邊擦撞
+        cth, sth = _math.cos(h), _math.sin(h)
+        for ex, ez in ((HL, HW), (HL, -HW), (-HL, HW), (-HL, -HW)):
+            px, pz = x + ex * cth - ez * sth, z + ex * sth + ez * cth
+            if any(abs(px - (l["cell"][0] + 0.5)) < 1.4 - 0.02 and abs(pz - (l["cell"][1] + 0.5)) < 1.8 - 0.02 for l in L["lifts"]):
+                return True
+        return False
+
     for _ in range(20000):
         e.step()
         for r in e.state["robots"].values():
@@ -202,6 +218,10 @@ def test_shaft_blocked_and_paths_avoid_it():
                 assert not in_shaft(p[0] + 0.5, p[1] + 0.5), f"{r['id']} path crosses shaft"
             if not r["lift_stage"] and not r["lift_id"]:
                 assert not in_shaft(r["position"][0], r["position"][2]), f"{r['id']} inside shaft outside lift flow"
+            in_flow = r["lift_id"] or r["lift_stage"] in ("BOARDING", "RIDING", "ALIGHTING")
+            if not in_flow:
+                assert not body_in_shaft(r["position"][0], r["position"][2], r["heading"]), \
+                    f"{r['id']} body clips shaft structure at ({r['position'][0]:.2f},{r['position'][2]:.2f})"
             if r["floor"] == 1 and not r["lift_id"]:
                 assert not in_column(r["position"][0], r["position"][2]), f"{r['id']} inside a support column"
                 for p in r["path"][r["path_index"]:]:

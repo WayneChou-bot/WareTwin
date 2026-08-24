@@ -8,13 +8,17 @@ export function buildNavGrid(layout: WarehouseLayout, floor = 1): { cols: number
   const { cols, rows, cell_size: cs } = layout.grid;
   const cells = new Uint8Array(cols * rows);
   // 電梯井道（鋼架＋護網）在每個樓層都是實體障礙：一般路徑必須繞過，
-  // 進出轎廂只走電梯狀態機的 microMove（不經網格）。取轎廂為中心的 3×3 格，
-  // 排隊格（cell-2-i）與全部出口候選點都在外面、維持可走。
+  // 進出轎廂只走電梯狀態機的 microMove（不經網格）。
+  // round-9g：井道 3D 外觀是 W 2.8 × D 3.6（Mezzanine LIFT_SHAFT），x 方向封 ±1.4（3 格，
+  // 覆蓋 2.8 + 兩側餘裕）夠用，但 z 方向若同樣只封 ±1.4（3 格 = 3.0 m）會讓南北護網各突出
+  // 0.4 m 到可走格 —— 貼著走的機器人（半寬 0.34、旋轉掃掠 0.58）會插進護網與角柱。
+  // 故 z 封 ±1.9（5 格），涵蓋 3.6 m 井道深度＋掃掠餘裕。排隊格（cell-4-i）、門軸中繼格
+  // 與全部出口候選點（dc −2/−3）都在封鎖範圍外、維持可走。
   const blockLifts = () => {
     for (const l of layout.lifts ?? []) {
       const x = l.cell[0] + 0.5, z = l.cell[1] + 0.5;
       const c0 = Math.max(0, Math.floor((x - 1.4) / cs)), c1 = Math.min(cols - 1, Math.ceil((x + 1.4) / cs) - 1);
-      const r0 = Math.max(0, Math.floor((z - 1.4) / cs)), r1 = Math.min(rows - 1, Math.ceil((z + 1.4) / cs) - 1);
+      const r0 = Math.max(0, Math.floor((z - 1.9) / cs)), r1 = Math.min(rows - 1, Math.ceil((z + 1.9) / cs) - 1);
       for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells[r * cols + c] = 1;
     }
   };

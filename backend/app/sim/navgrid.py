@@ -21,12 +21,14 @@ def build_nav_grid(layout: dict[str, Any], floor: int = 1) -> NavGrid:
 
     def block_lifts() -> None:
         # 電梯井道（鋼架＋護網）在每個樓層都是實體障礙：一般路徑必須繞過，
-        # 進出轎廂只走電梯狀態機的 micro-move（不經網格）。取轎廂為中心的 3×3 格，
-        # 排隊格（cell-2-i）與全部出口候選點都在外面、維持可走（規則與 TS 相同）。
+        # 進出轎廂只走電梯狀態機的 micro-move（不經網格）。
+        # round-9g：井道 3D 外觀是 W 2.8 × D 3.6，x 封 ±1.4（3 格）夠用，z 若也只封 ±1.4
+        # 會讓南北護網各突出 0.4 m 到可走格，貼著走的機器人會插進護網與角柱；
+        # 故 z 封 ±1.9（5 格）。排隊格、門軸中繼格與出口候選點都在範圍外（規則與 TS 相同）。
         for l in layout.get("lifts", []):
             x = l["cell"][0] + 0.5; z = l["cell"][1] + 0.5
             c0 = max(0, math.floor((x - 1.4) / cs)); c1 = min(cols - 1, math.ceil((x + 1.4) / cs) - 1)
-            r0 = max(0, math.floor((z - 1.4) / cs)); r1 = min(rows - 1, math.ceil((z + 1.4) / cs) - 1)
+            r0 = max(0, math.floor((z - 1.9) / cs)); r1 = min(rows - 1, math.ceil((z + 1.9) / cs) - 1)
             for r in range(r0, r1 + 1):
                 base = r * cols
                 for c in range(c0, c1 + 1):

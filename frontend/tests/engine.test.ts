@@ -46,7 +46,7 @@ describe("SimEngine", () => {
     }
     expect(eng.state.kpi.operation.completed_today).toBeGreaterThan(40);
     expect(minD).toBeGreaterThanOrEqual(0.5);
-  });
+  }, 30000);   // 12000 tick 在測試平行負載下偶爾超過預設 5 s —— 給明確上限（與 Demo 10 相同）
   it("does not gridlock under compound failure (Demo 10)", () => {
     const eng = new SimEngine(layout, { seed: 42 });
     for (let t = 0; t < 3000; t++) eng.step();
@@ -363,11 +363,14 @@ describe("rehydration edge cases（round-7）", () => {
 });
 
 describe("lift shaft as nav obstacle（round-8）", () => {
-  it("兩層網格都封鎖井道 3×3；排隊格與出口候選全部維持可走", () => {
+  it("兩層網格都封鎖井道 3×5（x ±1.4 / z ±1.9，涵蓋 3.6 m 井道深度）；排隊格與出口候選全部維持可走", () => {
     for (const fl of [1, 2]) {
       const g = buildNavGrid(layout as never, fl);
       for (const l of layout.lifts) {
         expect(g.cells[l.cell[1] * g.cols + l.cell[0]], `${l.id} cabin F${fl}`).toBe(1);
+        // round-9g：南北面（cell±2 列）也必須封 —— 井道深 3.6 m，只封 3 列時護網突出到可走格，路過的車會插進柱子
+        for (const dc of [-1, 0, 1]) for (const dr of [-2, 2])
+          expect(g.cells[(l.cell[1] + dr) * g.cols + (l.cell[0] + dc)], `${l.id} face(${dc},${dr}) F${fl}`).toBe(1);
         for (let i = 0; i < 3; i++) expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 4 - i)], `${l.id} queue${i} F${fl}`).not.toBe(1);
         expect(g.cells[l.cell[1] * g.cols + (l.cell[0] - 2)], `${l.id} gate cell F${fl}`).not.toBe(1);   // 門軸中繼格
         for (const [dc, dr] of [[-2, -2], [-2, 2], [-3, -1], [-3, 1], [-3, -2], [-3, 2], [-2, 0]])
@@ -391,6 +394,15 @@ describe("lift shaft as nav obstacle（round-8）", () => {
     eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M05", destination: "PACK-01" });
     eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M12", destination: "PACK-02" });
     const inShaft = (x: number, z: number) => layout.lifts.some((l) => Math.abs(x - (l.cell[0] + 0.5)) < 1.4 && Math.abs(z - (l.cell[1] + 0.5)) < 1.4);
+    // round-9g：車身四角（OBB）不得進入井道「視覺」矩形（W 2.8 × D 3.6）——中心點檢查抓不到貼邊擦撞
+    const bodyInShaft = (x: number, z: number, h: number) => {
+      const c = Math.cos(h), s = Math.sin(h);
+      for (const [ex, ez] of [[SIM.ROBOT_HALF_LEN, SIM.ROBOT_HALF_W], [SIM.ROBOT_HALF_LEN, -SIM.ROBOT_HALF_W], [-SIM.ROBOT_HALF_LEN, SIM.ROBOT_HALF_W], [-SIM.ROBOT_HALF_LEN, -SIM.ROBOT_HALF_W]]) {
+        const px = x + ex * c - ez * s, pz = z + ex * s + ez * c;
+        if (layout.lifts.some((l) => Math.abs(px - (l.cell[0] + 0.5)) < 1.4 - 0.02 && Math.abs(pz - (l.cell[1] + 0.5)) < 1.8 - 0.02)) return true;
+      }
+      return false;
+    };
     for (let i = 0; i < 20000; i++) {
       eng.step();
       for (const r of Object.values(eng.state.robots)) {
@@ -398,6 +410,8 @@ describe("lift shaft as nav obstacle（round-8）", () => {
           if (inShaft(r.path[pi][0] + 0.5, r.path[pi][1] + 0.5)) throw new Error(`${r.id} path crosses shaft at tick ${eng.state.sim.tick}`);
         }
         if (!r.lift_stage && !r.lift_id && inShaft(r.position[0], r.position[2])) throw new Error(`${r.id} inside shaft outside lift flow at tick ${eng.state.sim.tick}`);
+        const inFlow = r.lift_id || r.lift_stage === "BOARDING" || r.lift_stage === "RIDING" || r.lift_stage === "ALIGHTING";
+        if (!inFlow && bodyInShaft(r.position[0], r.position[2], r.heading)) throw new Error(`${r.id} body clips shaft structure at tick ${eng.state.sim.tick} (${r.position[0].toFixed(2)},${r.position[2].toFixed(2)})`);
         if (r.floor === 1 && !r.lift_id) {
           if (inColumn(r.position[0], r.position[2])) throw new Error(`${r.id} inside a support column at tick ${eng.state.sim.tick}`);
           for (let pi = r.path_index; pi < r.path.length; pi++) if (inColumn(r.path[pi][0] + 0.5, r.path[pi][1] + 0.5)) throw new Error(`${r.id} path crosses a support column`);
