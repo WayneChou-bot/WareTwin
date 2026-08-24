@@ -191,7 +191,7 @@ def test_shaft_blocked_and_paths_avoid_it():
 
 
 def test_alighting_exits_through_gate():
-    """出轎廂沿門軸直行（round-8c）：旋轉後車體包絡不出門洞、車尾離開門面才轉向；雙向與載貨/空車都驗證。
+    """三階段離梯（round-8d）：逐幀 OBB 四角穿門檢查 + 不邊走邊大轉；雙向與載貨/空車都驗證。
     幾何常數與 3D 井道模型（W 2.8 / LEAF 1.12）一致，防止漂移。"""
     assert SIM["LIFT_SHAFT_HALF_X"] * 2 == 2.8 and SIM["LIFT_DOOR_HALF_W"] == 1.12
     e = SimEngine(L, seed=5)
@@ -203,24 +203,38 @@ def test_alighting_exits_through_gate():
         e.create_task("REPLENISH", "CRITICAL", "INBOUND-2", "SHELF-M40"),
         e.create_task("PICK", "HIGH", "SHELF-M05", "PACK-01"),
     ]
-    dirs = set(); lifts_seen = set(); loads = set()
+    dirs = set(); lifts_seen = set(); loads = set(); prev = {}
     for _ in range(90000):
         e.step()
         for r in e.state["robots"].values():
             if r["lift_stage"] != "ALIGHTING" or not r["lift_id"]:
-                continue
+                prev.pop(r["id"], None); continue
             l = next(x for x in L["lifts"] if x["id"] == r["lift_id"])
             Ls = e.state["lifts"][l["id"]]
             cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
-            x = r["position"][0]; z = r["position"][2]; th = r["heading"]
-            half_x = abs(math.cos(th)) * SIM["ROBOT_HALF_LEN"] + abs(math.sin(th)) * SIM["ROBOT_HALF_W"]
-            half_z = abs(math.sin(th)) * SIM["ROBOT_HALF_LEN"] + abs(math.cos(th)) * SIM["ROBOT_HALF_W"]
+            x = r["position"][0]; z = r["position"][2]; h = r["heading"]
             door_plane = cx - SIM["LIFT_SHAFT_HALF_X"]
-            if x + half_x > door_plane:   # 車體仍接觸門平面/井道 → 完整包絡必須在門洞內
-                assert abs(z - cz) + half_z <= SIM["LIFT_DOOR_HALF_W"] + 1e-6, f"{r['id']} body outside door opening ({x:.2f},{z:.2f})"
-            if abs(z - cz) > 0.05:
-                assert x + half_x <= door_plane + 1e-6, f"{r['id']} turned before tail cleared the door plane ({x:.2f},{z:.2f})"
+            c = math.cos(h); sn = math.sin(h)
+            corners = [(x + sx * SIM["ROBOT_HALF_LEN"] * c - sz * SIM["ROBOT_HALF_W"] * sn,
+                        z + sx * SIM["ROBOT_HALF_LEN"] * sn + sz * SIM["ROBOT_HALF_W"] * c)
+                       for sx, sz in ((1, 1), (1, -1), (-1, 1), (-1, -1))]
+            # 車體跨越門平面時：所有跨越邊與 x=door_plane 的交點 z 必須都在門洞內
+            for a, b in ((0, 1), (1, 3), (3, 2), (2, 0)):
+                ax, az = corners[a]; bx, bz = corners[b]
+                if (ax - door_plane) * (bx - door_plane) < 0:
+                    zc = az + (bz - az) * ((door_plane - ax) / (bx - ax))
+                    assert abs(zc - cz) <= SIM["LIFT_DOOR_HALF_W"] + 1e-6, \
+                        f"{r['id']} body sweeps into door frame at z={zc:.2f} (x={x:.2f})"
             assert x <= cx + 0.1, f"{r['id']} moved east inside shaft"
+            # 不邊走邊大轉：單 tick heading 變化 > 0.09 rad 時，位移必須 < 0.02 m（原地旋轉）
+            pv = prev.get(r["id"])
+            if pv:
+                dh = h - pv[2]
+                while dh > math.pi: dh -= 2 * math.pi
+                while dh < -math.pi: dh += 2 * math.pi
+                if abs(dh) > 0.09:
+                    assert math.hypot(x - pv[0], z - pv[1]) < 0.02, f"{r['id']} walks while turning"
+            prev[r["id"]] = (x, z, h)
             if Ls["floor"] is not None:
                 dirs.add((r["floor"], Ls["floor"]))
             lifts_seen.add(l["id"]); loads.add(r["load"]["current"] > 0)

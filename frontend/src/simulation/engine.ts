@@ -93,6 +93,8 @@ interface RobotRt {
   /** 跨樓層：抵達電梯後要繼續前往的目標 */
   pending: { point: [number, number]; phase: RobotRt["phase"]; locId: string | null; floor: number } | null;
   liftId: string | null;
+  /** 三階段離梯（round-8d）：轎廂內轉向門 → 直行出門 → 原地轉向出口 → 前往出口 */
+  liftExitPhase: null | "TURN_OUT" | "OUT" | "TURN_EXIT" | "GO";
   /** 派工當下稽核記錄的電梯（round-6 P2）：planTo 跨樓層時優先使用，確保 Decision reasons 與實際路線一致 */
   plannedLiftId: string | null;
   /** 電梯子狀態機（規格書 §10）：null → TO_LIFT → QUEUED → BOARDING → RIDING → ALIGHTING → null */
@@ -148,7 +150,7 @@ export class SimEngine {
     this.state = opts.initialState ? JSON.parse(JSON.stringify(opts.initialState)) : this.buildInitialState(seed);
     for (const r of Object.values(this.state.robots)) { if (!r.perception) r.perception = { state: "CLEAR", ahead_m: SIM.LIDAR_RANGE, nearest_m: null, obstacles: [] }; if (r.floor === undefined) r.floor = 1; if (r.lift_id === undefined) r.lift_id = null; if (r.lift_stage === undefined) r.lift_stage = null; }
     if (!this.state.lifts) this.state.lifts = {};
-    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, plannedLiftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0, liftExit: null, liftBlockedTicks: 0 };
+    for (const id of Object.keys(this.state.robots)) this.rt[id] = { backingOff: false, resumePoint: null, dwell: 0, waitTicks: 0, target: null, goalLoc: null, phase: null, chargerId: null, idleTicks: 0, lastBatteryAlert: "NONE", frontId: null, frontDist: Infinity, lastPercEvent: -1e9, pending: null, liftId: null, liftExitPhase: null, plannedLiftId: null, liftStage: null, liftEnqueuedTick: 0, liftRetryTick: 0, liftExit: null, liftBlockedTicks: 0 };
     this.nextTaskTick = this.state.sim.tick + 10;
     if (opts.initialState) this.rehydrate();   // WS 斷線 → LOCAL 接手：從公開狀態反推私有 runtime，模擬才真正連續
   }
@@ -450,12 +452,13 @@ export class SimEngine {
     return [l.cell[0] - 2 + 0.5, l.cell[1] - 2 + 0.5];
   }
 
-  /** 閘門通過點（round-8c）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
-   *  x = 門面 − 車體半長 − 0.125 m 緩衝（= cx − 2.0）：到這裡整台車已完全離開門框。
-   *  排隊線退到 cell−3−i 後，門軸直行與佔用中的 slot0 相距 1.0 m ≥ 對接間距。 */
+  /** 閘門通過點＝轉向安全點（round-8d）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
+   *  x = 門面 − 車體【對角半徑】− 0.10 m 餘裕（≈ cx − 2.084）：長方形車體原地旋轉的掃掠圓半徑是
+   *  √(半長² + 半寬²) ≈ 0.584 m，只用半長會在最不利角度侵入門面 —— 到這裡整台車連旋轉都不碰門框。
+   *  排隊線在 cell−3−i，此點與佔用中的 slot0 相距 ≈ 0.916 m。 */
   private liftGatePoint(l: (typeof this.layout.lifts)[number]): [number, number] {
     const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
-    return [cx - (SIM.LIFT_SHAFT_HALF_X + SIM.ROBOT_HALF_LEN + 0.125), cz];
+    return [cx - (SIM.LIFT_SHAFT_HALF_X + Math.hypot(SIM.ROBOT_HALF_LEN, SIM.ROBOT_HALF_W) + 0.10), cz];
   }
 
   /** 直線微移動（進出轎廂 / 排隊遞補；不經過網格）。回傳是否已到達。 */
@@ -491,7 +494,7 @@ export class SimEngine {
       if (L.occupant === robotId) { L.occupant = null; if (L.state === "BOARDING" || L.state === "ALIGHTING") { L.state = "DOOR_CLOSING_AFTER_EXIT"; L.until_tick = this.state.sim.tick + SIM.LIFT_DOOR_TICKS; } }
     }
     const r = S.robots[robotId]; const rt = this.rt[robotId];
-    if (r && rt) { r.lift_id = null; this.setLiftStage(r, rt, null); }
+    if (r && rt) { r.lift_id = null; this.setLiftStage(r, rt, null); rt.liftExit = null; rt.liftBlockedTicks = 0; rt.liftExitPhase = null; }
   }
 
   /** 每 tick 推進所有電梯的狀態機（在機器人之前跑） */
@@ -628,22 +631,36 @@ export class SimEngine {
       }
       case "ALIGHTING": {
         const tf = rt.pending!.floor;                      // 出口與間距全用目的樓層計算；r.floor 到抵達出口那一刻才翻
-        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; }
-        // 兩段式出轎廂（round-8c）：沿門軸正中央直行出閘門；門檻 = gate.x + 0.05（= 門面 − 車體半長 − 0.075 m），
-        // 即「車尾完全離開門框」才允許轉向出口節點 —— 不會斜穿門片、也不會轉向時掃到門框
+        if (!rt.liftExit) { rt.liftExit = this.pickLiftExit(lay, tf); rt.liftBlockedTicks = 0; rt.liftExitPhase = null; }
         const gate = this.liftGatePoint(lay);
-        const throughGate = r.position[0] <= gate[0] + 0.05;
-        const legArrived = this.microMove(r, throughGate ? rt.liftExit : gate, SIM.LIFT_BOARD_SPEED, tf);
-        const arrived = throughGate && legArrived;
-        if (!arrived && r.velocity === 0) {
-          if (++rt.liftBlockedTicks % 40 === 0) rt.liftExit = this.pickLiftExit(lay, tf, rt.liftBlockedTicks / 40);   // 被擋 4 秒換一個出口
+        // 三階段離梯（round-8d）：轎廂內先原地轉向門 → 沿門軸直行、【真正抵達】轉向安全點（門面 − 對角半徑 − 0.10 m）
+        // → 原地旋轉朝出口（速度 0、4.0 rad/s 有限角速度、誤差 < 0.06 rad 才走）→ 前往出口。
+        // 位移與旋轉不再同時發生：旋轉掃掠（對角半徑 0.584 m）全程遠離門框，畫面也不會「邊走邊甩」。
+        if (!rt.liftExitPhase) rt.liftExitPhase = "TURN_OUT";
+        const rotateTo = (tx: number, tz: number): boolean => {
+          const want = Math.atan2(tz - r.position[2], tx - r.position[0]);
+          let dh = want - r.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+          r.velocity = 0;
+          r.heading += Math.sign(dh) * Math.min(Math.abs(dh), 4.0 * SIM.TICK_S);
+          return Math.abs(dh) < 0.06;
+        };
+        let arrived = false;
+        if (rt.liftExitPhase === "TURN_OUT") { if (rotateTo(gate[0], gate[1])) rt.liftExitPhase = "OUT"; }
+        else if (rt.liftExitPhase === "OUT") { if (this.microMove(r, gate, SIM.LIFT_BOARD_SPEED, tf)) rt.liftExitPhase = "TURN_EXIT"; }
+        else if (rt.liftExitPhase === "TURN_EXIT") { if (rotateTo(rt.liftExit[0], rt.liftExit[1])) rt.liftExitPhase = "GO"; }
+        else arrived = this.microMove(r, rt.liftExit, SIM.LIFT_BOARD_SPEED, tf);
+        if (!arrived && r.velocity === 0 && (rt.liftExitPhase === "OUT" || rt.liftExitPhase === "GO")) {
+          if (++rt.liftBlockedTicks % 40 === 0) {   // 被擋 4 秒換一個出口；換了出口要先轉再走
+            rt.liftExit = this.pickLiftExit(lay, tf, rt.liftBlockedTicks / 40);
+            if (rt.liftExitPhase === "GO") rt.liftExitPhase = "TURN_EXIT";
+          }
         } else if (r.velocity > 0) rt.liftBlockedTicks = 0;
         if (arrived) {
           r.floor = tf;                                    // ✅ 完全離開門區的這一刻才進入目的樓層網格
           L.occupant = null; r.lift_id = null;
           L.state = "DOOR_CLOSING_AFTER_EXIT"; L.until_tick = tick + SIM.LIFT_DOOR_TICKS;
           this.emit("ROBOT_EXITED", "LIFT", "INFO", `${r.id} exited ${rt.liftId} on Floor ${r.floor}`, { robot_id: r.id });
-          const p = rt.pending!; rt.pending = null; this.setLiftStage(r, rt, null); rt.liftId = null; rt.liftExit = null; rt.liftBlockedTicks = 0;
+          const p = rt.pending!; rt.pending = null; this.setLiftStage(r, rt, null); rt.liftId = null; rt.liftExit = null; rt.liftBlockedTicks = 0; rt.liftExitPhase = null;
           this.planTo(r, rt, p.point, p.phase, p.locId, p.floor);   // REPLANNING_AFTER_LIFT
         }
         return true;

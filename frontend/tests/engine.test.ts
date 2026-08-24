@@ -393,13 +393,13 @@ describe("lift shaft as nav obstacle（round-8）", () => {
   }, 180000);
 });
 
-describe("alighting exits through the gate（round-8c 車體包絡）", () => {
+describe("alighting exits through the gate（round-8d 三階段 + OBB）", () => {
   it("引擎門區幾何常數與 3D 井道模型一致（防止兩處漂移）", () => {
     expect(SIM.LIFT_SHAFT_HALF_X * 2).toBe(LIFT_SHAFT.W);
     expect(SIM.LIFT_DOOR_HALF_W).toBe(LIFT_SHAFT.LEAF);
   });
 
-  it("出轎廂沿門軸直行：旋轉後車體包絡不出門洞、車尾離開門面才轉向；雙向與載貨/空車都驗證", () => {
+  it("三階段離梯：逐幀 OBB 四角穿門檢查 + 不邊走邊大轉；雙向與載貨/空車都驗證", () => {
     const eng = new SimEngine(layout, { seed: 5 });
     const tasks = [
       eng.createTask({ type: "PICK", priority: "CRITICAL", source: "SHELF-M02", destination: "PACK-01" }),
@@ -410,23 +410,39 @@ describe("alighting exits through the gate（round-8c 車體包絡）", () => {
       eng.createTask({ type: "PICK", priority: "HIGH", source: "SHELF-M05", destination: "PACK-01" }),
     ];
     const dirs = new Set<string>(); const liftsSeen = new Set<string>(); const loads = new Set<boolean>();
+    const prev: Record<string, { x: number; z: number; h: number } | undefined> = {};
     for (let i = 0; i < 90000; i++) {
       eng.step();
       for (const r of Object.values(eng.state.robots)) {
-        if (r.lift_stage !== "ALIGHTING" || !r.lift_id) continue;
+        if (r.lift_stage !== "ALIGHTING" || !r.lift_id) { prev[r.id] = undefined; continue; }
         const l = layout.lifts.find((x) => x.id === r.lift_id)!;
         const L = eng.state.lifts[l.id];
         const cx = l.cell[0] + 0.5, cz = l.cell[1] + 0.5;
-        const x = r.position[0], z = r.position[2];
-        // 旋轉後的車體包絡投影
-        const halfX = Math.abs(Math.cos(r.heading)) * SIM.ROBOT_HALF_LEN + Math.abs(Math.sin(r.heading)) * SIM.ROBOT_HALF_W;
-        const halfZ = Math.abs(Math.sin(r.heading)) * SIM.ROBOT_HALF_LEN + Math.abs(Math.cos(r.heading)) * SIM.ROBOT_HALF_W;
+        const x = r.position[0], z = r.position[2], h = r.heading;
         const doorPlane = cx - SIM.LIFT_SHAFT_HALF_X;
-        if (x + halfX > doorPlane) {   // 車體仍接觸門平面/井道 → 完整包絡必須在門洞內
-          if (Math.abs(z - cz) + halfZ > SIM.LIFT_DOOR_HALF_W + 1e-6) throw new Error(`${r.id} body outside door opening (${x.toFixed(2)},${z.toFixed(2)}, θ=${r.heading.toFixed(2)})`);
+        // OBB 四角（旋轉後的實際車體）
+        const c = Math.cos(h), sn = Math.sin(h);
+        const corners = ([[1, 1], [1, -1], [-1, 1], [-1, -1]] as const).map(([sx, sz]) => [
+          x + sx * SIM.ROBOT_HALF_LEN * c - sz * SIM.ROBOT_HALF_W * sn,
+          z + sx * SIM.ROBOT_HALF_LEN * sn + sz * SIM.ROBOT_HALF_W * c,
+        ]);
+        // 車體跨越門平面時：所有跨越邊與 x=doorPlane 的交點 z 必須都在門洞內
+        const edges = [[0, 1], [1, 3], [3, 2], [2, 0]] as const;
+        for (const [a, b] of edges) {
+          const [ax, az] = corners[a], [bx, bz] = corners[b];
+          if ((ax - doorPlane) * (bx - doorPlane) < 0) {
+            const zc = az + (bz - az) * ((doorPlane - ax) / (bx - ax));
+            if (Math.abs(zc - cz) > SIM.LIFT_DOOR_HALF_W + 1e-6) throw new Error(`${r.id} body sweeps into door frame at z=${zc.toFixed(2)} (x=${x.toFixed(2)}, θ=${h.toFixed(2)})`);
+          }
         }
-        if (Math.abs(z - cz) > 0.05 && x + halfX > doorPlane + 1e-6) throw new Error(`${r.id} turned before tail cleared the door plane (${x.toFixed(2)},${z.toFixed(2)})`);
         if (x > cx + 0.1) throw new Error(`${r.id} moved east inside shaft`);
+        // 不邊走邊大轉：單 tick heading 變化 > 0.09 rad 時，位移必須 < 0.02 m（原地旋轉）
+        const pv = prev[r.id];
+        if (pv) {
+          let dh = h - pv.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+          if (Math.abs(dh) > 0.09 && Math.hypot(x - pv.x, z - pv.z) > 0.02) throw new Error(`${r.id} walks while turning (Δθ=${dh.toFixed(2)}, Δp=${Math.hypot(x - pv.x, z - pv.z).toFixed(3)})`);
+        }
+        prev[r.id] = { x, z, h };
         if (L.floor !== null) dirs.add(`${r.floor}->${L.floor}`);
         liftsSeen.add(l.id); loads.add(r.load.current > 0);
       }

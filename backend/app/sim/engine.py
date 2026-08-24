@@ -74,7 +74,7 @@ def _sign(x: float) -> float:
 class RobotRt:
     __slots__ = ("dwell", "wait_ticks", "target", "goal_loc", "phase", "charger_id", "idle_ticks", "last_battery_alert", "backing_off", "resume_point",
                  "front_id", "front_dist", "last_perc_event", "pending", "lift_id", "lift_stage", "lift_enqueued_tick", "lift_retry_tick",
-                 "lift_exit", "lift_blocked_ticks", "planned_lift_id")
+                 "lift_exit", "lift_blocked_ticks", "planned_lift_id", "lift_exit_phase")
 
     def __init__(self) -> None:
         self.backing_off = False; self.resume_point: Optional[tuple[float, float]] = None
@@ -87,6 +87,8 @@ class RobotRt:
         self.lift_exit: Optional[tuple[float, float]] = None; self.lift_blocked_ticks = 0
         # 派工當下稽核記錄的電梯（round-6 P2）：_plan_to 跨樓層時優先使用，確保 Decision reasons 與實際路線一致
         self.planned_lift_id: Optional[str] = None
+        # 三階段離梯（round-8d）：TURN_OUT → OUT → TURN_EXIT → GO
+        self.lift_exit_phase: Optional[str] = None
 
 
 class SimEngine:
@@ -423,11 +425,12 @@ class SimEngine:
         return (l["cell"][0] + 0.5, l["cell"][1] + 0.5)
 
     def _lift_gate_point(self, l: dict[str, Any]) -> tuple[float, float]:
-        """閘門通過點（round-8c）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
-        x = 門面 − 車體半長 − 0.125 m 緩衝（= cx − 2.0）：到這裡整台車已完全離開門框。
-        排隊線退到 cell−3−i 後，門軸直行與佔用中的 slot0 相距 1.0 m ≥ 對接間距。"""
+        """閘門通過點＝轉向安全點（round-8d）：門軸正中央（z = cz，不偏移 —— 偏移會讓車體掃過門框）。
+        x = 門面 − 車體【對角半徑】− 0.10 m 餘裕（≈ cx − 2.084）：長方形車體原地旋轉的掃掠圓半徑是
+        √(半長² + 半寬²) ≈ 0.584 m，只用半長會在最不利角度侵入門面 —— 到這裡整台車連旋轉都不碰門框。
+        排隊線在 cell−3−i，此點與佔用中的 slot0 相距 ≈ 0.916 m。"""
         cx = l["cell"][0] + 0.5; cz = l["cell"][1] + 0.5
-        return (cx - (SIM["LIFT_SHAFT_HALF_X"] + SIM["ROBOT_HALF_LEN"] + 0.125), cz)
+        return (cx - (SIM["LIFT_SHAFT_HALF_X"] + math.hypot(SIM["ROBOT_HALF_LEN"], SIM["ROBOT_HALF_W"]) + 0.10), cz)
 
     def _pick_lift_exit(self, l: dict[str, Any], floor: int, skip: int = 0) -> tuple[float, float]:
         """出口節點（規格書 §6.4）：與排隊線分開；出轎廂走「門軸 → 閘門 → 出口」兩段路（round-8b），
@@ -502,7 +505,7 @@ class SimEngine:
                     L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = S["sim"]["tick"] + SIM["LIFT_DOOR_TICKS"]
         r = S["robots"].get(robot_id); rt = self.rt.get(robot_id)
         if r is not None and rt is not None:
-            r["lift_id"] = None; self._set_lift_stage(r, rt, None); rt.lift_exit = None; rt.lift_blocked_ticks = 0
+            r["lift_id"] = None; self._set_lift_stage(r, rt, None); rt.lift_exit = None; rt.lift_blocked_ticks = 0; rt.lift_exit_phase = None
 
     def _step_lifts(self) -> None:
         S = self.state; tick = S["sim"]["tick"]
@@ -642,17 +645,41 @@ class SimEngine:
         if stage == "ALIGHTING":
             tf = rt.pending["floor"]   # 出口與間距全用目的樓層計算；r["floor"] 到抵達出口那一刻才翻
             if rt.lift_exit is None:
-                rt.lift_exit = self._pick_lift_exit(lay, tf); rt.lift_blocked_ticks = 0
-            # 兩段式出轎廂（round-8c）：沿門軸正中央直行出閘門；門檻 = gate.x + 0.05（= 門面 − 車體半長 − 0.075 m），
-            # 即「車尾完全離開門框」才允許轉向出口節點 —— 不會斜穿門片、也不會轉向時掃到門框
+                rt.lift_exit = self._pick_lift_exit(lay, tf); rt.lift_blocked_ticks = 0; rt.lift_exit_phase = None
             gate = self._lift_gate_point(lay)
-            through_gate = r["position"][0] <= gate[0] + 0.05
-            leg_arrived = self._micro_move(r, rt.lift_exit if through_gate else gate, SIM["LIFT_BOARD_SPEED"], tf)
-            arrived = through_gate and leg_arrived
-            if not arrived and r["velocity"] == 0:
+            # 三階段離梯（round-8d）：轎廂內先原地轉向門 → 沿門軸直行、【真正抵達】轉向安全點（門面 − 對角半徑 − 0.10 m）
+            # → 原地旋轉朝出口（速度 0、4.0 rad/s 有限角速度、誤差 < 0.06 rad 才走）→ 前往出口。
+            # 位移與旋轉不再同時發生：旋轉掃掠（對角半徑 0.584 m）全程遠離門框，畫面也不會「邊走邊甩」。
+            if not rt.lift_exit_phase:
+                rt.lift_exit_phase = "TURN_OUT"
+
+            def rotate_to(tx: float, tz: float) -> bool:
+                want = math.atan2(tz - r["position"][2], tx - r["position"][0])
+                dh = want - r["heading"]
+                while dh > math.pi: dh -= 2 * math.pi
+                while dh < -math.pi: dh += 2 * math.pi
+                r["velocity"] = 0
+                r["heading"] += _sign(dh) * min(abs(dh), 4.0 * SIM["TICK_S"])
+                return abs(dh) < 0.06
+
+            arrived = False
+            if rt.lift_exit_phase == "TURN_OUT":
+                if rotate_to(gate[0], gate[1]):
+                    rt.lift_exit_phase = "OUT"
+            elif rt.lift_exit_phase == "OUT":
+                if self._micro_move(r, gate, SIM["LIFT_BOARD_SPEED"], tf):
+                    rt.lift_exit_phase = "TURN_EXIT"
+            elif rt.lift_exit_phase == "TURN_EXIT":
+                if rotate_to(rt.lift_exit[0], rt.lift_exit[1]):
+                    rt.lift_exit_phase = "GO"
+            else:
+                arrived = self._micro_move(r, rt.lift_exit, SIM["LIFT_BOARD_SPEED"], tf)
+            if not arrived and r["velocity"] == 0 and rt.lift_exit_phase in ("OUT", "GO"):
                 rt.lift_blocked_ticks += 1
-                if rt.lift_blocked_ticks % 40 == 0:   # 被擋 4 秒換一個出口
+                if rt.lift_blocked_ticks % 40 == 0:   # 被擋 4 秒換一個出口；換了出口要先轉再走
                     rt.lift_exit = self._pick_lift_exit(lay, tf, rt.lift_blocked_ticks // 40)
+                    if rt.lift_exit_phase == "GO":
+                        rt.lift_exit_phase = "TURN_EXIT"
             elif r["velocity"] > 0:
                 rt.lift_blocked_ticks = 0
             if arrived:
@@ -661,7 +688,7 @@ class SimEngine:
                 L["state"] = "DOOR_CLOSING_AFTER_EXIT"; L["until_tick"] = tick + SIM["LIFT_DOOR_TICKS"]
                 self.emit("ROBOT_EXITED", "LIFT", "INFO", f"{r['id']} exited {rt.lift_id} on Floor {r['floor']}", robot_id=r["id"])
                 p = rt.pending; rt.pending = None; self._set_lift_stage(r, rt, None); rt.lift_id = None
-                rt.lift_exit = None; rt.lift_blocked_ticks = 0
+                rt.lift_exit = None; rt.lift_blocked_ticks = 0; rt.lift_exit_phase = None
                 self._plan_to(r, rt, tuple(p["point"]), p["phase"], p["loc_id"], p["floor"])
             return True
         return False
