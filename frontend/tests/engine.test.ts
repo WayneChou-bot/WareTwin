@@ -516,7 +516,7 @@ describe("building pillars & charging dock（round-9d）", () => {
   it("充電機器人正好停在充電板中央、車頭朝樁、彼此不重疊", () => {
     const e = new SimEngine(layout, { seed: 3 });
     for (const rid of Object.keys(e.state.robots).slice(0, 3)) e.inject({ kind: "ROBOT_BATTERY_SET", robot_id: rid, battery: 25 } as never);
-    const pads = layout.charging_stations.map((c) => [c.position[0], c.position[2] - 1.3] as const);
+    const pads = layout.charging_stations.map((c) => [c.position[0], c.position[2] - 1.9] as const);
     const seen = new Set<string>();
     for (let i = 0; i < 20000; i++) {
       e.step();
@@ -530,8 +530,8 @@ describe("building pillars & charging dock（round-9d）", () => {
         if (SimEngine.obbOverlap(chg[a].position[0], chg[a].position[2], chg[a].heading, chg[b].position[0], chg[b].position[2], chg[b].heading))
           throw new Error(`${chg[a].id} overlaps ${chg[b].id} while charging`);
       for (const r of chg) seen.add(r.id);
-      if (seen.size >= 2) break;
+      if (chg.length >= 2) { expect(chg.length).toBeGreaterThanOrEqual(2); return; }   // round-9e：必須「同時」兩台在充
     }
-    expect(seen.size).toBeGreaterThanOrEqual(2);
+    throw new Error("second robot could not dock while first still charging (approach lane blocked)");
   }, 120000);
 });

@@ -811,7 +811,7 @@ export class SimEngine {
           this.setFsm(r, "CHARGING");
           // 入塢對齊（round-9d）：停在自己充電樁的藍色充電板正中央、車頭朝樁 —— 前端補間呈現為入塢動作
           const chg = rt.chargerId ? this.layout.charging_stations.find((c) => c.id === rt.chargerId) : undefined;
-          if (chg) { r.position[0] = chg.position[0]; r.position[2] = chg.position[2] - 1.3; r.heading = Math.PI / 2; r.velocity = 0; }
+          if (chg) { r.position[0] = chg.position[0]; r.position[2] = chg.position[2] - 1.9; r.heading = Math.PI / 2; r.velocity = 0; }   // −1.9 = 停車排整格中心（64.5）：與南側走廊淨距 1.0 m，後車可通行
           this.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", `${r.id} charging started (${r.battery.toFixed(0)}%)`, { robot_id: r.id });
         }
         break;

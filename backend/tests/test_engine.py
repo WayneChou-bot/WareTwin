@@ -150,7 +150,7 @@ def test_pillars_blocked_and_charging_docks_on_pad():
     e = SimEngine(L, seed=3)
     for rid in list(e.state["robots"].keys())[:3]:
         e.inject({"kind": "ROBOT_BATTERY_SET", "robot_id": rid, "battery": 25})
-    pads = [(c["position"][0], c["position"][2] - 1.3) for c in L["charging_stations"]]
+    pads = [(c["position"][0], c["position"][2] - 1.9) for c in L["charging_stations"]]
     seen = set()
     for _ in range(20000):
         e.step()
@@ -165,6 +165,7 @@ def test_pillars_blocked_and_charging_docks_on_pad():
                                                  chg[j]["position"][0], chg[j]["position"][2], chg[j]["heading"]), \
                     f"{chg[i]['id']} overlaps {chg[j]['id']} while charging"
         seen |= {r["id"] for r in chg}
-        if len(seen) >= 2:
+        if len(chg) >= 2:   # round-9e：必須「同時」兩台在充 —— 進場走廊不被充電中的車擋住
             break
     assert len(seen) >= 2, "fewer than 2 robots ever charged"
+    assert len(chg) >= 2, "second robot could not dock while first still charging (approach lane blocked)"

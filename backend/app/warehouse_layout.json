@@ -3800,7 +3800,7 @@
       "zone": "A",
       "path": [
         [
-          10,
+          2.5,
           35
         ],
         [
@@ -3853,6 +3853,25 @@
       "direction": "FORWARD",
       "blocks_grid": true,
       "feeds": "PACK-01"
+    },
+    {
+      "id": "CV04",
+      "name": "Conveyor #03",
+      "zone": "D",
+      "path": [
+        [
+          2.5,
+          35
+        ],
+        [
+          2.5,
+          60
+        ]
+      ],
+      "width": 1.0,
+      "speed_mps": 0.6,
+      "direction": "FORWARD",
+      "blocks_grid": true
     }
   ],
   "stations": [
@@ -3909,13 +3928,13 @@
       "position": [
         22.0,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         22.0,
-        65
+        64.5
       ]
     },
     {
@@ -3924,13 +3943,13 @@
       "position": [
         24.5,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         24.5,
-        65
+        64.5
       ]
     },
     {
@@ -3939,13 +3958,13 @@
       "position": [
         27.0,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         27.0,
-        65
+        64.5
       ]
     },
     {
@@ -3954,13 +3973,13 @@
       "position": [
         29.5,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         29.5,
-        65
+        64.5
       ]
     },
     {
@@ -3969,13 +3988,13 @@
       "position": [
         32.0,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         32.0,
-        65
+        64.5
       ]
     },
     {
@@ -3984,13 +4003,13 @@
       "position": [
         34.5,
         0,
-        66
+        66.4
       ],
       "heading": 3.14159,
       "power_kw": 3.0,
       "access_point": [
         34.5,
-        65
+        64.5
       ]
     }
   ],
@@ -10010,7 +10029,7 @@
       "level_range": null,
       "access_point": [
         22.0,
-        65
+        64.5
       ]
     },
     {
@@ -10021,7 +10040,7 @@
       "level_range": null,
       "access_point": [
         24.5,
-        65
+        64.5
       ]
     },
     {
@@ -10032,7 +10051,7 @@
       "level_range": null,
       "access_point": [
         27.0,
-        65
+        64.5
       ]
     },
     {
@@ -10043,7 +10062,7 @@
       "level_range": null,
       "access_point": [
         29.5,
-        65
+        64.5
       ]
     },
     {
@@ -10054,7 +10073,7 @@
       "level_range": null,
       "access_point": [
         32.0,
-        65
+        64.5
       ]
     },
     {
@@ -10065,7 +10084,7 @@
       "level_range": null,
       "access_point": [
         34.5,
-        65
+        64.5
       ]
     }
   ],

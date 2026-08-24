@@ -86,7 +86,23 @@ function Conveyor({ c }: { c: LayoutConveyor }) {
       ))}
     </group>
   );
-  return <group>{segs}{parcels}</group>;
+  // round-9e：兩端設備 —— 起點進料斗、終點接收機台（包裹不再看起來掉到地上）
+  const p0 = c.path[0], pN = c.path[c.path.length - 1];
+  const endEquip = (
+    <group>
+      <group position={[p0[0], 0, p0[1]]}>
+        <mesh position={[0, 0.75, 0]} castShadow><boxGeometry args={[1.6, 1.5, 1.6]} /><meshStandardMaterial color="#39424f" metalness={0.5} roughness={0.5} /></mesh>
+        <mesh position={[0, 1.62, 0]}><boxGeometry args={[1.9, 0.28, 1.9]} /><meshStandardMaterial color="#2a323d" metalness={0.6} roughness={0.4} /></mesh>
+      </group>
+      <group position={[pN[0], 0, pN[1]]}>
+        <mesh position={[0, 0.45, 0]} castShadow><boxGeometry args={[1.7, 0.9, 1.7]} /><meshStandardMaterial color="#39424f" metalness={0.5} roughness={0.5} /></mesh>
+        <mesh position={[0, 0.95, 0]} rotation-x={0.35}><boxGeometry args={[1.5, 0.08, 1.3]} /><meshStandardMaterial color="#4a5568" metalness={0.6} roughness={0.35} /></mesh>
+        <mesh position={[0, 1.1, 0]}><boxGeometry args={[0.25, 0.5, 0.25]} /><meshStandardMaterial color="#22303f" /></mesh>
+        <mesh position={[0, 1.4, 0]}><sphereGeometry args={[0.08, 8, 8]} /><meshBasicMaterial color="#22c55e" /></mesh>
+      </group>
+    </group>
+  );
+  return <group>{segs}{parcels}{endEquip}</group>;
 }
 
 /** 工作站、充電樁、停車區、限制區、人行道、感測器 */
@@ -132,8 +148,8 @@ export function Fixtures({ lite = false }: { lite?: boolean }) {
           <group key={c.id} position={[c.position[0], 0, c.position[2]]}>
             <mesh position={[0, 0.6, 0]} castShadow><boxGeometry args={[0.8, 1.2, 0.4]} /><meshStandardMaterial color="#1f2937" metalness={0.6} roughness={0.4} /></mesh>
             <mesh position={[0, 0.9, 0.21]}><planeGeometry args={[0.5, 0.25]} /><meshBasicMaterial color={occupied ? "#3b82f6" : "#22c55e"} /></mesh>
-            <mesh position={[0, 0.01, -1.3]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.6, 2]} /><meshBasicMaterial color="#1d4ed8" transparent opacity={0.25} /></mesh>
-            {occupied && <pointLight position={[0, 1, -1]} color="#3b82f6" intensity={lite ? 0 : 3} distance={4} />}
+            <mesh position={[0, 0.01, -1.9]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.6, 1.6]} /><meshBasicMaterial color="#1d4ed8" transparent opacity={0.25} /></mesh>
+            {occupied && <pointLight position={[0, 1, -1.9]} color="#3b82f6" intensity={lite ? 0 : 3} distance={4} />}
           </group>
         );
       })}

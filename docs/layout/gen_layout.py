@@ -126,11 +126,13 @@ layout["lifts"] = [
 # ── Conveyors：中央橫向一條 + 左右各一條短的進 packing
 layout["conveyors"] = [
     {"id": "CV01", "name": "Conveyor #01", "zone": "A",
-     "path": [[10, 35], [46, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-02"},
+     "path": [[2.5, 35], [46, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-02"},
     {"id": "CV02", "name": "Conveyor #02", "zone": "B",
      "path": [[54, 35], [97.5, 35]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "SORT-01"},
     {"id": "CV03", "name": "Conveyor #03", "zone": "D",
      "path": [[97.5, 35], [97.5, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, "feeds": "PACK-01"},
+{"id": "CV04", "name": "Conveyor #03", "zone": "D",
+     "path": [[2.5, 35], [2.5, 60]], "width": 1.0, "speed_mps": 0.6, "direction": "FORWARD", "blocks_grid": True, },
 ]
 
 # ── Stations：Packing / Sorting
@@ -151,11 +153,12 @@ for d in layout["docks"]:
 for i in range(6):
     x = 22 + i * 2.5
     layout["charging_stations"].append({
-        "id": f"CHG-{i+1:02d}", "zone": "C", "position": [x, 0, 66], "heading": 3.14159,
-        "power_kw": 3.0, "access_point": [x, 65],
+        # round-9e：櫃體退到 66.4（封格）；入口點 = 停車排（64.5，整格中心）—— 充電中與通行走廊淨距 1.0 m
+        "id": f"CHG-{i+1:02d}", "zone": "C", "position": [x, 0, 66.4], "heading": 3.14159,
+        "power_kw": 3.0, "access_point": [x, 64.5],
     })
     layout["locations"].append({"id": f"CHG-{i+1:02d}", "kind": "CHARGING", "zone": "C",
-                                "rack_id": None, "level_range": None, "access_point": [x, 65]})
+                                "rack_id": None, "level_range": None, "access_point": [x, 64.5]})
 
 # ── Parking：下方中間
 layout["parking"] = [{"id": "PARK-1", "zone": "C", "rect": [40, 63, 60, 68], "slots": 10}]

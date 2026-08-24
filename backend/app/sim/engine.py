@@ -838,7 +838,8 @@ class SimEngine:
                 # 入塢對齊（round-9d）：停在自己充電樁的藍色充電板正中央、車頭朝樁 —— 前端補間呈現為入塢動作
                 chg = next((c for c in self.layout["charging_stations"] if c["id"] == rt.charger_id), None) if rt.charger_id else None
                 if chg:
-                    r["position"][0] = chg["position"][0]; r["position"][2] = chg["position"][2] - 1.3
+                    # −1.9 = 停車排整格中心（64.5）：與南側走廊淨距 1.0 m，後車可通行（round-9e 解排隊卡死）
+                    r["position"][0] = chg["position"][0]; r["position"][2] = chg["position"][2] - 1.9
                     r["heading"] = math.pi / 2; r["velocity"] = 0
                 self.emit("ROBOT_STATE_CHANGED", "ROBOT", "INFO", f"{r['id']} charging started ({js_to_fixed0(r['battery'])}%)", robot_id=r["id"])
         elif f == "CHARGING":
