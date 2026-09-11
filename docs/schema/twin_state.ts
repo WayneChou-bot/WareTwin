@@ -465,6 +465,25 @@ export interface WhatIfRequest {
   duration_ticks: number;             // 規格: 60 秒 = 600 ticks
   /** 是否同時跑一份無注入的 baseline 做對照 (建議 true) */
   run_baseline: boolean;
+  /** round-10 A1：1–5。>1 時額外跑 N−1 對「同起始狀態、不同衍生 seed」的重播，
+   *  對每項 KPI 回報 Δ 的 min/median/max（模型內部隨機變異區間）；duration 會被夾到 3000 tick */
+  ensemble_seeds?: number;
+}
+
+export interface WhatIfMetric { key: string; label: string; higher_is_better: boolean }
+/** 對照表用的視窗 KPI（12 項），鍵見 backend sim/whatif.py METRICS */
+export interface WhatIfWindow { baseline: Record<string, number> | null; scenario: Record<string, number>; metrics: WhatIfMetric[] }
+export interface Range3 { min: number; median: number; max: number }
+/** round-10 A1：多 seed 重播的經驗範圍（multi-seed range）——模型內部隨機變異，不是統計上的預測/信賴區間 */
+export interface WhatIfEnsemble { seeds_run: number; scenario_range: Record<string, Range3>; delta_range?: Record<string, Range3> | null }
+export interface WhatIfDivEvent { tick: number; type: string; message: string }
+/** round-10 A3：同亂數對的事件流按 tick 分組比對；first_divergence 兩側各列「只在該側出現」的事件（空 = 該側無事件） */
+export interface WhatIfEventDiff {
+  first_divergence: { tick: number; scenario: WhatIfDivEvent[]; baseline: WhatIfDivEvent[] } | null;
+  event_count_delta: Array<{ type: string; delta: number }>;
+  compared_until_tick: number;
+  /** false = 簽章截斷且截斷前無分岔 → 不能宣稱兩條流相同 */
+  complete: boolean;
 }
 
 export interface WhatIfResult {
@@ -475,6 +494,11 @@ export interface WhatIfResult {
   delta: Record<string, number>;
   key_events: TwinEvent[];
   ai_recommendation: string | null;   // Phase 6
+  window: WhatIfWindow;
+  start_tick: number;
+  compute_ms: number;
+  ensemble?: WhatIfEnsemble | null;     // ensemble_seeds > 1 時
+  event_diff?: WhatIfEventDiff | null;  // run_baseline 時
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -518,6 +542,7 @@ export type ServerMessage =
   | { type: "PATCH"; base_tick: number; tick: number; patch: DeepPartial<TwinState>; events: TwinEvent[] }
   | { type: "HEATMAP"; layer: HeatmapLayer }
   | { type: "WHATIF_RESULT"; request_id?: string | null; result: WhatIfResult }
+  | { type: "WHATIF_PROGRESS"; request_id?: string | null; done: number; total: number }   // round-10：多 seed 每跑完一對回報一次
   | { type: "COPILOT_REPLY"; request_id: string; text: string; citations: Array<{ event_id?: EventId; robot_id?: RobotId; task_id?: TaskId }>; model?: string }
   | { type: "ERROR"; code: string; message: string; request_id?: string | null };
 

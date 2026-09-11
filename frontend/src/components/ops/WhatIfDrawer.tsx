@@ -6,20 +6,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useFocusTrap } from "../ui/useFocusTrap";
 import { useStore, tickToClock } from "../../state/store";
-import { wsSend, onWhatIfResult, onWhatIfError, markWhatIfPending } from "../../services/ws";
+import { wsSend, onWhatIfResult, onWhatIfError, onWhatIfProgress, markWhatIfPending } from "../../services/ws";
 import { simControl } from "../../simulation/runner";
-import type { ScenarioInjection, TwinEvent } from "../../schema/twin_state";
+import type { ScenarioInjection, WhatIfResult } from "../../schema/twin_state";
 
-interface Win { [k: string]: number }
-export interface WhatIfResultEx {
-  request: { scenario_name: string; injections: ScenarioInjection[]; duration_ticks: number; run_baseline: boolean };
-  delta: Record<string, number>;
-  key_events: TwinEvent[];
-  ai_recommendation: string | null;
-  window: { baseline: Win | null; scenario: Win; metrics: Array<{ key: string; label: string; higher_is_better: boolean }> };
-  start_tick: number;
-  compute_ms: number;
-}
+/** 結果型別以共用 schema（twin_state.ts ≡ backend schema.py WhatIfResult）為準，抽屜不再自行定義 */
+export type WhatIfResultEx = WhatIfResult;
+
+/** ensemble 時單次時長上限（秒）——與 backend sim/whatif.py ensemble_duration_cap 同一條規則：seeds × duration ≤ 9000 tick */
+const durationCapS = (seeds: number) => (seeds <= 1 ? 600 : Math.max(30, Math.floor(9000 / seeds / 10)));
 
 const PRESETS: Array<{ id: string; label: string; demo: string; build: () => ScenarioInjection }> = [
   { id: "r07", label: "R07 failure", demo: "08", build: () => ({ kind: "ROBOT_FAILURE", robot_id: "R07" }) },
@@ -40,12 +35,15 @@ export function WhatIfDrawer() {
   const setResult = useStore((s) => s.setWhatIf);
   const [sel, setSel] = useState<Set<string>>(new Set(["r07"]));
   const [dur, setDur] = useState(300);
+  const [seeds, setSeeds] = useState(1);
   const [baseline, setBaseline] = useState(true);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => onWhatIfResult((r) => { pendingId.current = null; setResult(r as WhatIfResultEx); setRunning(false); setErr(null); }), [setResult]);
+  useEffect(() => onWhatIfResult((r) => { pendingId.current = null; setResult(r as WhatIfResultEx); setRunning(false); setProgress(null); setErr(null); }), [setResult]);
   const seq = useRef(0); const pendingId = useRef<string | null>(null);
-  useEffect(() => onWhatIfError((m, id) => { if (id === pendingId.current) { pendingId.current = null; setRunning(false); setErr(m); } }), []);
+  useEffect(() => onWhatIfError((m, id) => { if (id === pendingId.current) { pendingId.current = null; setRunning(false); setProgress(null); setErr(m); } }), []);
+  useEffect(() => onWhatIfProgress((done, total, id) => { if (id === pendingId.current) setProgress({ done, total }); }), []);
   const trap = useFocusTrap<HTMLElement>(open);
   useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null); window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [open, setDrawer]);
   if (!open) return null;
@@ -54,8 +52,8 @@ export function WhatIfDrawer() {
   const run = () => {
     if (source !== "online" || sel.size === 0) return;
     const request_id = `w${++seq.current}-${Date.now().toString(36)}`; pendingId.current = request_id;
-    setRunning(true); setErr(null); markWhatIfPending(request_id);
-    wsSend({ type: "WHATIF_RUN", request_id, request: { scenario_name: PRESETS.filter((p) => sel.has(p.id)).map((p) => p.label).join(" + "), injections: injections(), duration_ticks: dur * 10, run_baseline: baseline } });
+    setRunning(true); setProgress(null); setErr(null); markWhatIfPending(request_id);
+    wsSend({ type: "WHATIF_RUN", request_id, request: { scenario_name: PRESETS.filter((p) => sel.has(p.id)).map((p) => p.label).join(" + "), injections: injections(), duration_ticks: Math.min(dur, durationCapS(seeds)) * 10, run_baseline: baseline, ensemble_seeds: seeds } });
   };
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fmt = (k: string, v: number) => k === "on_time_rate" || k === "utilization" ? `${Math.round(v * 100)}%` : k === "congestion_index" ? `${Math.round(v * 100)}%` : Number.isInteger(v) ? String(v) : v.toFixed(1);
@@ -76,11 +74,15 @@ export function WhatIfDrawer() {
         </div>
         <div className="wi-ctl">
           <label>Duration
-            <select value={dur} onChange={(e) => setDur(+e.target.value)}>{[60, 120, 180, 300, 600].map((d) => <option key={d} value={d}>{d >= 60 ? `${d / 60} min` : `${d} s`}</option>)}</select>
+            <select value={Math.min(dur, durationCapS(seeds))} onChange={(e) => setDur(+e.target.value)}>{[60, 120, 180, 300, 600].filter((d) => d <= durationCapS(seeds)).map((d) => <option key={d} value={d}>{d >= 60 ? `${d / 60} min` : `${d} s`}</option>)}</select>
+          </label>
+          <label>Seeds
+            <select value={seeds} onChange={(e) => setSeeds(+e.target.value)} title="Replay the same window under different random seeds to get a range instead of a single number">{[1, 3, 5].map((n) => <option key={n} value={n}>{n === 1 ? "1 (single)" : `${n} (range)`}</option>)}</select>
           </label>
           <label className="auto"><input type="checkbox" checked={baseline} onChange={(e) => setBaseline(e.target.checked)} /> compare with baseline</label>
-          <button className="btn primary" disabled={running || source !== "online" || sel.size === 0} onClick={run}>{running ? "Simulating…" : "RUN"}</button>
+          <button className="btn primary" disabled={running || source !== "online" || sel.size === 0} onClick={run}>{running ? (progress ? `Simulating… ${progress.done}/${progress.total}` : "Simulating…") : "RUN"}</button>
         </div>
+        {seeds > 1 && <div className="hint">Multi-seed range: {seeds} seeded replays per side. The range is the empirical spread across those replays — the model's internal stochastic variability, not real-world uncertainty. Compute budget caps duration at {durationCapS(seeds) / 60} min for {seeds} seeds.</div>}
         {source !== "online" && <div className="hint">What-if runs on the backend (clone of the live engine). Start the backend to enable.</div>}
         {err && <div className="form-err" style={{ marginTop: 6 }}>⚠ {err}</div>}
 
@@ -94,17 +96,44 @@ export function WhatIfDrawer() {
                   const b = result.window.baseline?.[m.key], s = result.window.scenario[m.key];
                   const d = b === undefined || b === null ? 0 : s - b;
                   const good = d === 0 ? null : (d > 0) === m.higher_is_better;
+                  const dr = result.ensemble?.delta_range?.[m.key];
+                  // 沒有 baseline 時 Δ 欄是空的，多 seed 的區間改在 Scenario 欄呈現（median + [min … max]）
+                  const sr = !dr ? result.ensemble?.scenario_range?.[m.key] : undefined;
                   return (
                     <tr key={m.key}>
                       <td style={{ fontFamily: "var(--font)" }}>{m.label}</td>
                       <td>{b === undefined || b === null ? "—" : fmt(m.key, b)}</td>
-                      <td>{fmt(m.key, s)}</td>
-                      <td className={good === null ? "" : good ? "st-inprog" : "st-fail"}>{b === undefined || b === null ? "" : `${d > 0 ? "+" : ""}${fmt(m.key, Math.abs(d)).replace(/^/, d < 0 ? "-" : "")} ${pctText(m.key, b, s)}`}</td>
+                      <td>
+                        {sr ? fmt(m.key, sr.median) : fmt(m.key, s)}
+                        {sr && <div className="demo" style={{ whiteSpace: "nowrap" }}>[{fmt(m.key, sr.min)} … {fmt(m.key, sr.max)}] · median of {result.ensemble!.seeds_run}</div>}
+                      </td>
+                      <td className={good === null ? "" : good ? "st-inprog" : "st-fail"}>
+                        {b === undefined || b === null ? "" : `${d > 0 ? "+" : ""}${fmt(m.key, Math.abs(d)).replace(/^/, d < 0 ? "-" : "")} ${pctText(m.key, b, s)}`}
+                        {dr && <div className="demo" style={{ whiteSpace: "nowrap" }}>Δ [{fmt(m.key, dr.min)} … {fmt(m.key, dr.max)}] · med {fmt(m.key, dr.median)}</div>}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            {result.ensemble && <div className="hint">Multi-seed range across {result.ensemble.seeds_run} seeded replays — the empirical spread of the model's internal stochastic variability, not real-world uncertainty.</div>}
+            {result.event_diff && (
+              <>
+                <h4 className="drawer-sub">Divergence vs baseline (same seed)</h4>
+                {result.event_diff.first_divergence ? (
+                  <div className="wi-events">
+                    <div className="ev-row"><span className="t">{tickToClock(result.event_diff.first_divergence.tick, 100, true).slice(0, 8)}</span>
+                      <span>First divergence — scenario: <b>{result.event_diff.first_divergence.scenario.length ? result.event_diff.first_divergence.scenario.map((e) => e.message).join("; ") : "no event"}</b>
+                        <span className="demo"> · baseline at this tick: {result.event_diff.first_divergence.baseline.length ? result.event_diff.first_divergence.baseline.map((e) => e.message).join("; ") : "no event"}</span></span></div>
+                    {result.event_diff.event_count_delta.slice(0, 8).map((c) => (
+                      <div key={c.type} className="ev-row"><span className="t">{c.delta > 0 ? "+" : ""}{c.delta}</span><span className="demo">{c.type}</span></div>
+                    ))}
+                  </div>
+                ) : result.event_diff.complete
+                  ? <div className="hint">Event streams are identical — the injections produced no observable divergence in this window.</div>
+                  : <div className="hint">No divergence found up to {tickToClock(result.event_diff.compared_until_tick, 100, true).slice(0, 8)} — the event log was truncated after that point, so the rest of the window was not compared.</div>}
+              </>
+            )}
             <h4 className="drawer-sub">AI recommendation</h4>
             <div className="bubble" style={{ maxWidth: "100%", background: "var(--panel-2)", border: "1px solid var(--border)" }}>{result.ai_recommendation}</div>
             <h4 className="drawer-sub">Key events in scenario ({result.key_events.length})</h4>

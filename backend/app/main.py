@@ -16,7 +16,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +35,7 @@ from .guard import MAX_BODY_BYTES, MAX_WS_MESSAGE_BYTES, client_key, limiter, or
 from .schema import (ClearInjectionBody, ClientMessage, CopilotBody, NewTask, ScenarioInjection, SimControlBody, TwinState,
                      VlmObserveBody, WhatIfRequest)
 from .sim.engine import SimEngine, SIM
-from .sim.whatif import run_whatif
+from .sim.whatif import run_whatif, WhatIfBusy
 from .sim.navgrid import load_layout
 
 log = logging.getLogger("twin")
@@ -285,16 +285,32 @@ class TwinServer:
             await ws.send_text(json.dumps({"type": "COPILOT_REPLY", "request_id": msg.request_id, "text": reply["text"], "citations": cites, "model": reply.get("model")}, ensure_ascii=False))
         elif t == "WHATIF_RUN":
             req = msg.request.model_dump(exclude_none=True)
-            result = await self.run_whatif_safe(req)
-            eng.emit("AI_DECISION", "AI_AGENT", "INFO", f"What-if '{req.get('scenario_name', 'scenario')}' simulated {req.get('duration_ticks', 600) // 10}s: throughput {result['delta'].get('throughput_per_min', 0):+} tasks/min", payload={"compute_ms": result["compute_ms"]})
+            loop = asyncio.get_running_loop()
+            # 進度（round-10）：worker thread 每跑完一對就排程一則 WHATIF_PROGRESS 回前端（多 seed 時可能跑數十秒）
+            def progress(done: int, total: int) -> None:
+                if total > 1:
+                    loop.call_soon_threadsafe(asyncio.ensure_future, ws.send_text(json.dumps({"type": "WHATIF_PROGRESS", "request_id": msg.request_id, "done": done, "total": total})))
+            try:
+                result = await self.run_whatif_safe(req, progress)
+            except WhatIfBusy:
+                await ws.send_text(json.dumps({"type": "ERROR", "code": "BUSY", "message": "another What-if is running — try again in a moment", "request_id": msg.request_id})); return
+            eng.emit("AI_DECISION", "AI_AGENT", "INFO", f"What-if '{req.get('scenario_name', 'scenario')}' simulated {result['request']['duration_ticks'] // 10}s × {result['request']['ensemble_seeds']} seed(s): throughput {result['delta'].get('throughput_per_min', 0):+} tasks/min", payload={"compute_ms": result["compute_ms"]})
             await ws.send_text(json.dumps({"type": "WHATIF_RESULT", "request_id": msg.request_id, "result": result}, ensure_ascii=False))
 
-    async def run_whatif_safe(self, req: dict[str, Any]) -> dict[str, Any]:
-        """在主 event loop 上先 clone（此時沒有 tick 在進行），再把獨立的 clone 交給 worker thread 跑；同時只允許一個 What-if。"""
+    async def run_whatif_safe(self, req: dict[str, Any], progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
+        """在主 event loop 上先 clone（此時沒有 tick 在進行），再把獨立的 clone 交給 worker thread 跑；
+        同時只允許一個 What-if —— 忙碌時直接丟 WhatIfBusy（不排隊：多 seed 一次可能跑數十秒，
+        排隊會讓後來的訪客只看到 Simulating… 而沒有任何回饋）。
+        ensemble_seeds > 1（round-10 A1）：多 clone N−1 對，seed 重設在 run_whatif 內做（結果可重現）。"""
+        if self._whatif_lock.locked():
+            raise WhatIfBusy()
         async with self._whatif_lock:
             start_tick = self.engine.state["sim"]["tick"]
+            n = max(1, min(int(req.get("ensemble_seeds", 1) or 1), 5))
+            run_b = bool(req.get("run_baseline", True))
             base, scen = self.engine.clone(), self.engine.clone()
-            return await asyncio.to_thread(run_whatif, base, scen, req, start_tick)
+            extra = [((self.engine.clone() if run_b else None), self.engine.clone()) for _ in range(n - 1)]
+            return await asyncio.to_thread(run_whatif, base, scen, req, start_tick, extra, progress)
 
     def reset(self, seed: int | None = None) -> None:
         if seed is not None:
@@ -540,7 +556,10 @@ async def post_whatif(body: dict[str, Any], request: Request) -> dict[str, Any]:
         req = WhatIfRequest.model_validate(body).model_dump(exclude_none=True)
     except ValidationError as e:
         raise HTTPException(400, str(e)[:300])
-    return await server.run_whatif_safe(req)
+    try:
+        return await server.run_whatif_safe(req)
+    except WhatIfBusy:
+        raise HTTPException(503, "another What-if is running — try again in a moment", headers={"Retry-After": "10"})
 
 
 @app.get("/api/ai/status")

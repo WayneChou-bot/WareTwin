@@ -559,6 +559,61 @@ class WhatIfRequest(_Base):
     injections: list[ScenarioInjection] = Field(max_length=8)
     duration_ticks: int = Field(default=600, gt=0, le=6000)
     run_baseline: bool = True
+    # round-10 A1：>1 時額外跑 N−1 對「同起始狀態、不同衍生 seed」的重播，
+    # 對每項 KPI 回報 Δ 的 min/median/max（模型內部隨機變異的區間，非真實世界不確定性）。
+    # ensemble > 1 時 duration 會被引擎端夾到 3000 tick 以控制計算量。
+    ensemble_seeds: int = Field(default=1, ge=1, le=5)
+
+
+class WhatIfMetric(_Base):
+    key: str
+    label: str
+    higher_is_better: bool
+
+
+class WhatIfWindow(_Base):
+    """對照表用的視窗 KPI（完成數、吞吐、平均任務時間…12 項），鍵見 sim/whatif.py METRICS"""
+    baseline: Optional[dict[str, float]] = None
+    scenario: dict[str, float]
+    metrics: list[WhatIfMetric]
+
+
+class Range3(_Base):
+    min: float
+    median: float
+    max: float
+
+
+class WhatIfEnsemble(_Base):
+    """round-10 A1：多 seed 重播的經驗範圍（multi-seed range）——模型內部隨機變異，不是統計上的預測/信賴區間"""
+    seeds_run: int
+    scenario_range: dict[str, Range3]
+    delta_range: Optional[dict[str, Range3]] = None   # run_baseline=false 時沒有
+
+
+class WhatIfDivEvent(_Base):
+    tick: int
+    type: str
+    message: str
+
+
+class WhatIfFirstDivergence(_Base):
+    tick: int
+    scenario: list[WhatIfDivEvent]   # 該 tick 只在 scenario 出現的事件（空 = 該側無事件）
+    baseline: list[WhatIfDivEvent]   # 該 tick 只在 baseline 出現的事件
+
+
+class WhatIfEventCountDelta(_Base):
+    type: str
+    delta: int
+
+
+class WhatIfEventDiff(_Base):
+    """round-10 A3：同亂數對的事件流按 tick 分組比對"""
+    first_divergence: Optional[WhatIfFirstDivergence] = None
+    event_count_delta: list[WhatIfEventCountDelta]
+    compared_until_tick: int
+    complete: bool   # False = 簽章截斷且截斷前無分岔 → 不能宣稱兩條流相同
 
 
 class WhatIfResult(_Base):
@@ -568,6 +623,19 @@ class WhatIfResult(_Base):
     delta: dict[str, float]
     key_events: list[TwinEvent]
     ai_recommendation: Optional[str] = None
+    window: WhatIfWindow
+    start_tick: int
+    compute_ms: int
+    ensemble: Optional[WhatIfEnsemble] = None     # ensemble_seeds > 1 時
+    event_diff: Optional[WhatIfEventDiff] = None  # run_baseline 時
+
+
+class MsgWhatIfProgress(_Base):
+    """round-10：多 seed What-if 每跑完一對就回報一次（單 seed 不送）"""
+    type: Literal["WHATIF_PROGRESS"] = "WHATIF_PROGRESS"
+    request_id: Optional[str] = None
+    done: int
+    total: int
 
 
 # ─────────────────────────────────────────────────────────────
@@ -645,7 +713,7 @@ class MsgError(_Base):
 
 
 ServerMessage = Annotated[
-    Union[MsgFull, MsgPatch, MsgHeatmap, MsgWhatIfResult, MsgCopilotReply, MsgError],
+    Union[MsgFull, MsgPatch, MsgHeatmap, MsgWhatIfResult, MsgWhatIfProgress, MsgCopilotReply, MsgError],
     Field(discriminator="type"),
 ]
 

@@ -34,8 +34,11 @@ export function onCopilotReply(fn: (r: CopilotReply) => void): () => void { copi
 const whatifListeners = new Set<(r: unknown) => void>();
 export function onWhatIfResult(fn: (r: unknown) => void): () => void { whatifListeners.add(fn); return () => whatifListeners.delete(fn); }
 const whatifErrorListeners = new Set<(message: string, request_id: string | null) => void>();
-/** 後端對 WHATIF_RUN 回 ERROR（RATE_LIMITED / BAD_MESSAGE…）時通知，讓抽屜解除 Simulating 狀態 */
+/** 後端對 WHATIF_RUN 回 ERROR（RATE_LIMITED / BUSY / BAD_MESSAGE…）時通知，讓抽屜解除 Simulating 狀態 */
 export function onWhatIfError(fn: (message: string, request_id: string | null) => void): () => void { whatifErrorListeners.add(fn); return () => whatifErrorListeners.delete(fn); }
+const whatifProgressListeners = new Set<(done: number, total: number, request_id: string | null) => void>();
+/** round-10：多 seed What-if 每跑完一對就收到一次 WHATIF_PROGRESS */
+export function onWhatIfProgress(fn: (done: number, total: number, request_id: string | null) => void): () => void { whatifProgressListeners.add(fn); return () => whatifProgressListeners.delete(fn); }
 /** 正在等待結果的 What-if request_id（null = 沒有）；ERROR / WHATIF_RESULT 都要帶同一個 id 才會被當成它的回應 */
 let whatifPending: string | null = null;
 export function markWhatIfPending(id: string | null) { whatifPending = id; }
@@ -108,10 +111,11 @@ function handle(msg: ServerMessage) {
     case "HEATMAP": st.setHeat(msg.layer); break;
     case "COPILOT_REPLY": copilotListeners.forEach((fn) => fn(msg as unknown as CopilotReply)); break;
     case "WHATIF_RESULT": if (!msg.request_id || msg.request_id === whatifPending) whatifPending = null; whatifListeners.forEach((fn) => fn(msg.result)); break;
+    case "WHATIF_PROGRESS": whatifProgressListeners.forEach((fn) => fn(msg.done, msg.total, msg.request_id ?? null)); break;
     case "ERROR": {
       console.warn("[ws] server error", msg.code, msg.message);
-      if (msg.code === "RATE_LIMITED" || msg.code === "TOO_LARGE" || msg.code === "BAD_TASK" || msg.code === "BAD_MESSAGE") {
-        st.setNotice(`${msg.code === "RATE_LIMITED" ? "Rate limit" : msg.code === "TOO_LARGE" ? "Request too large" : msg.code === "BAD_TASK" ? "Task rejected" : "Rejected"}: ${msg.message}`);
+      if (msg.code === "RATE_LIMITED" || msg.code === "TOO_LARGE" || msg.code === "BAD_TASK" || msg.code === "BAD_MESSAGE" || msg.code === "BUSY") {
+        st.setNotice(`${msg.code === "RATE_LIMITED" ? "Rate limit" : msg.code === "TOO_LARGE" ? "Request too large" : msg.code === "BAD_TASK" ? "Task rejected" : msg.code === "BUSY" ? "Busy" : "Rejected"}: ${msg.message}`);
         // Copilot 等待中的泡泡也要收掉
         const rid = (msg as unknown as { request_id?: string }).request_id;
         if (rid) copilotListeners.forEach((fn) => fn({ request_id: rid, text: `⏳ ${msg.message}`, citations: [] }));

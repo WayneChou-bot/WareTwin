@@ -35,7 +35,7 @@ WareTwin 是一個 100 × 70 m 倉庫的即時 **3D 數位分身**：20 台自�
 | 🤖 **機器人車隊模擬** | 100 ms tick 的確定性引擎：FSM、交通加權格點上的 8 方向 A*、格點預約與死鎖解除、電池模型與充電排程、會真的造成瓶頸的輸送帶。 |
 | 🧠 **可解釋的 Fleet Manager** | 每次指派都列出選中機器人的理由（距離、電量、負載、擁塞、健康）以及每個落選者為什麼輸。 |
 | ⚡ **情境注入** | 機器人故障、低電量、輸送帶停機、人員闖入（封鎖 Zone + 改道）、交通擁塞、攝影機離線、需求爆量——一鍵注入、皆可解除。 |
-| 🔮 **What-if 模擬** | 複製當下的 Twin、注入、跑 1–10 分鐘，以同一個亂數種子的 Baseline 比較 12 項指標。LIVE 完全不受影響。 |
+| 🔮 **What-if 模擬** | 複製當下的 Twin、注入、跑 1–10 分鐘，以同一個亂數種子的 Baseline 比較 12 項指標；可選最多 5 個 seed 的重播取得多 seed 區間（各指標 min/median/max——模型內部隨機變異，不是統計上的預測區間），並按 tick 比對兩條事件流指出第一個分岔點。LIVE 完全不受影響。 |
 | 💬 **AI 營運 Copilot** | 問「Why is throughput dropping?」——答案來自即時狀態並引用可點擊的機器人／任務／事件。LLM 可選（見 [AI 模式](#-ai-模式)）。 |
 | 🏢 **多樓層與貨梯** | 鋼構夾層（厚樓板、主次梁、立柱、護欄）有自己的貨架、Zone、攝影機與導航網格。兩座貨梯是後端權威的完整狀態機——預約、FIFO 排隊、滑動門與安全連鎖（門開著不會動）、smoothstep 平台載著機器人升降、冷卻、故障自動改走另一座。機器人依 排隊 → 上車 → 搭乘 → 下車 → 重新規劃 流程，樓層只能在這個流程內改變。 |
 | 📡 **機上感知** | 每台 AMR 配備虛擬 270°／4 m LiDAR：看得到其他機器人與人員（貨架會遮擋視線），主動減速與保持車距，不再只靠格子預約；回報 `CLEAR / SLOWING / STOPPED` 與所見障礙，3D 畫面以感測扇形呈現。 |
@@ -98,7 +98,7 @@ WareTwin/
 ## 🧪 測試
 
 ```bash
-cd backend && python -m pytest -q      # 50 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、電梯、複合故障不死鎖、WS/REST、AI、What-if
+cd backend && python -m pytest -q      # 52 個：PRNG 對照、A*、20 分鐘壓力（無 < 0.5 m 碰撞）、感知、確定性、低電量、闖入、電梯、複合故障不死鎖、WS/REST、AI、What-if
 cd frontend && npm test                 # 32 個：TypeScript 引擎的相同契約
 ```
 
@@ -113,7 +113,7 @@ cd frontend && npm test                 # 32 個：TypeScript 引擎的相同契
 | 防護 | 預設 |
 |---|---|
 | 輸入上限 | `TASK_BURST.count ≤ 30`、注入時長 ≤ 10 分鐘、What-if ≤ 8 個注入／10 分鐘、Copilot 問題 ≤ 500 字、VLM 影像 ≤ 400 KB；任務地點必須存在、符合任務類型、不可是充電樁（`sim/rules.py`，TS 同步） |
-| Rate limit（每個 client IP，記憶體內、會回收） | 改變狀態 20 次/分 · Copilot 與 VLM 10 次/分 · What-if 4 次/分 · WebSocket 訊息 120 次/分 → `429` / `RATE_LIMITED`。client IP 取 `X-Forwarded-For` 最後一段（`TWIN_TRUSTED_PROXIES`），無法偽造 |
+| Rate limit（每個 client IP，記憶體內、會回收） | 改變狀態 20 次/分 · Copilot 與 VLM 10 次/分 · What-if 4 次/分 · WebSocket 訊息 120 次/分 → `429` / `RATE_LIMITED`。What-if 同時只跑一個——第二個請求立即回 `503` / `BUSY` 而不是排隊；多 seed 以 seeds × duration ≤ 9,000 tick 封頂並逐對回報進度。client IP 取 `X-Forwarded-For` 最後一段（`TWIN_TRUSTED_PROXIES`），無法偽造 |
 | Origin 檢查 | 設了 `TWIN_CORS_ORIGINS` 後，WebSocket 與 POST 必須帶允許的 `Origin`。正式環境只允許 `https://ware-twin.vercel.app`；Vercel preview 預設不開，需要時再加鎖定自己 scope slug 的 `TWIN_CORS_REGEX`（`TWIN_ALLOW_NO_ORIGIN=1` 可放行 curl） |
 | Body 大小 | REST 512 KB 在 ASGI stream 層以實際 bytes 計算（chunked／造假 `Content-Length` 都擋）、WebSocket 單則 64 KB（UTF-8 bytes） |
 | Health | 模擬 task 死掉或超過 `TWIN_HEALTH_STALL_S` 秒沒推進，`/api/health` 回 `503`，Render 會自動重啟 |
